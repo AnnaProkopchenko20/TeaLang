@@ -1,0 +1,5 @@
+Program
+  Decl c заповненість const
+    BinOp !=
+      Const 1
+      Const 2

@@ -1,0 +1,16 @@
+Program
+  Decl лічильник горнятко_32чл відкрита
+    Const 10
+  Decl є_готовим заповненість const
+    Bool повне
+  якщо
+    BinOp ==
+      Var лічильник
+      Const 10
+    Block
+      Assign лічильник
+        BinOp +
+          Var лічильник
+          Const 1
+  чайна_перерва
+    Const 0

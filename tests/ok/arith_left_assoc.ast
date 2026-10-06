@@ -1,0 +1,7 @@
+Program
+  Decl r горнятко_32чл const
+    BinOp -
+      BinOp -
+        Const 10
+        Const 3
+      Const 2
