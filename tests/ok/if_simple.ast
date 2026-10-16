@@ -1,0 +1,6 @@
+Program
+  якщо
+    Bool повне
+    Block
+      чайна_перерва
+        Const 0

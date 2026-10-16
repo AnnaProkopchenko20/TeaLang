@@ -1,0 +1,23 @@
+Program
+  Decl x горнятко_32чл const
+    Const 5
+  якщо
+    BinOp ==
+      Var x
+      Const 5
+    Block
+      якщо
+        BinOp !=
+          Var x
+          Const 6
+        Block
+          чайна_перерва
+            Const 1
+        інакше
+          Block
+            чайна_перерва
+              Const 2
+    інакше
+      Block
+        чайна_перерва
+          Const 3

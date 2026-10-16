@@ -1,0 +1,12 @@
+Program
+  якщо
+    BinOp ==
+      Const 1
+      Const 2
+    Block
+      чайна_перерва
+        Const 1
+    інакше
+      Block
+        чайна_перерва
+          Const 2

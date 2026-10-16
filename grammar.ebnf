@@ -1,0 +1,73 @@
+(* ===================================================================
+   Grammar of the "tea" language (Ukrainian keywords), stage 1.
+   Notation: ISO-style EBNF.  { x } = zero or more, [ x ] = optional,
+   a | b = alternative, "text" = literal terminal.
+   NL = end of a source line.  The language is LINE-ORIENTED: the lexer
+   groups tokens by line and every statement ends at the end of its line.
+   Empty (or whitespace-only) lines are ignored everywhere.
+   =================================================================== *)
+
+(* ---------------------------- syntax ----------------------------- *)
+
+program     ::= { statement } ;
+
+statement   ::= declaration | assignment | if_stmt | while_stmt | exit_stmt ;
+
+declaration ::= [ "відкрита" ] type identifier ":=" expression NL ;
+
+(* the value is written on the LEFT, the target on the RIGHT *)
+assignment  ::= expression "=>" identifier NL ;
+
+(* "{" and "}" must each be alone on their own line;
+   "інакше" must start a new line and be alone on it *)
+if_stmt     ::= "якщо" "(" expression ")" NL block
+                [ "інакше" NL block ] ;
+
+while_stmt  ::= "допоки" "(" expression ")" NL block ;
+
+(* a block contains at least one statement *)
+block       ::= "{" NL statement { statement } "}" NL ;
+
+exit_stmt   ::= "чайна_перерва" factor NL ;
+
+type        ::= "горнятко_32чл"      (* i32  *)
+              | "кухоль_64чл"        (* i64  *)
+              | "заповненість" ;     (* bool *)
+
+(* comparison is NOT chainable: a == b == c is a syntax error *)
+expression  ::= arith [ ( "==" | "!=" ) arith ] ;
+
+arith       ::= term { ( "+" | "-" ) term } ;
+
+term        ::= factor { "*" factor } ;
+
+(* there are no parentheses in expressions; "(" ")" appear only
+   around the condition of if / while *)
+factor      ::= number
+              | "повне"              (* true  *)
+              | "пусте"              (* false *)
+              | identifier
+              | "!" factor ;
+
+(* ---------------------------- lexical ---------------------------- *)
+
+(* source files are UTF-8; a Cyrillic letter is two bytes *)
+
+number      ::= digit { digit } ;     (* decimal, no sign, no range check *)
+
+identifier  ::= ident_start { ident_char } ;   (* but not a keyword *)
+ident_start ::= letter | "_" ;
+ident_char  ::= letter | digit | "_" ;
+letter      ::= "a".."z" | "A".."Z" | cyrillic_letter ;
+digit       ::= "0".."9" ;
+
+keyword     ::= "горнятко_32чл" | "кухоль_64чл" | "заповненість"
+              | "відкрита" | "повне" | "пусте"
+              | "якщо" | "інакше" | "допоки" | "чайна_перерва" ;
+
+operator    ::= ":=" | "=>" | "==" | "!=" | "+" | "-" | "*" | "!" ;
+paren       ::= "(" | ")" ;
+brace       ::= "{" | "}" ;
+
+(* Whitespace (space, tab) separates tokens and is otherwise ignored.
+   Any other byte is a lexical error. *)

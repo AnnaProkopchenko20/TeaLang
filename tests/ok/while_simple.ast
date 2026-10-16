@@ -1,0 +1,12 @@
+Program
+  Decl i горнятко_32чл відкрита
+    Const 0
+  допоки
+    BinOp !=
+      Var i
+      Const 3
+    Block
+      Assign i
+        BinOp +
+          Var i
+          Const 1

@@ -1,0 +1,5 @@
+Program
+  Decl x горнятко_32чл відкрита
+    Const 1
+  Assign x
+    Const 2
