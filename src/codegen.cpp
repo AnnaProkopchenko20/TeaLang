@@ -488,6 +488,7 @@ llvm::Value* CodeGen::visit_this(ThisNode&)
 
 llvm::Value* CodeGen::visit_var(VarNameNode& n)
 {
+    // Global constants emit ConstantInt directly with no memory load
     if (auto* g = dynamic_cast<GlobalDeclNode*>(n.decl))
     {
         if (is_bool(g->type_name))
