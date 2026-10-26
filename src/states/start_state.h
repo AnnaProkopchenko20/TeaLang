@@ -62,6 +62,7 @@ public:
         if (b == '-') { ctx.markStart(); ctx.changeState(StateId::Minus);    return true; }
         if (b == '=') { ctx.markStart(); ctx.changeState(StateId::Equals);   return true; }
         if (b == '!') { ctx.markStart(); ctx.changeState(StateId::Negation); return true; }
+        if (b == '#') { ctx.changeState(StateId::Comment);   return true; }
         if (b == '"') { ctx.markStart(); ctx.changeState(StateId::String);   return true; }
 
         ctx.fail("unexpected byte " + LexerContext::describeByte(b), ctx.line, ctx.col);

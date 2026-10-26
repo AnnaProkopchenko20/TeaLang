@@ -3,7 +3,7 @@
 
 class LexerContext;
 
-enum class StateId { Start, Ident, Number, Assign, Equals, Negation, Minus, String };
+enum class StateId { Start, Ident, Number, Assign, Equals, Negation, Minus, String, Comment };
 
 // Base class of all lexer states (the "State" of the State pattern).
 class LexerState

@@ -1,6 +1,7 @@
 #pragma once
 // Includes every concrete state and defines the factory used by LexerContext.
 #include "assign_state.h"
+#include "comment_state.h"
 #include "equals_state.h"
 #include "ident_state.h"
 #include "minus_state.h"
@@ -21,6 +22,7 @@ inline std::unique_ptr<LexerState> makeState(StateId id)
         case StateId::Negation: return std::make_unique<NegationState>();
         case StateId::Minus:    return std::make_unique<MinusState>();
         case StateId::String:   return std::make_unique<StringState>();
+        case StateId::Comment:  return std::make_unique<CommentState>();
     }
     return nullptr;
 }
