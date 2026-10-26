@@ -673,16 +673,39 @@ llvm::Value* SemanticChecker::visit_program(ProgramNode& n)
     scopes.emplace_back();
     current_fn = nullptr;
     current_struct_info = nullptr;
-    for (auto& s : n.stmts) s->accept(*this);
+    check_stmt_list(n.stmts);
     scopes.pop_back();
 
     return nullptr;
 }
 
+void SemanticChecker::check_stmt_list(const std::vector<std::unique_ptr<StmtNode>>& stmts)
+{
+    bool dead = false;
+    bool warned = false;
+
+    for (const auto& s : stmts)
+    {
+        if (dead && !warned)
+        {
+            warnings.push_back("warning: line " + std::to_string(s->line) + ":" +
+                               std::to_string(s->col) + ": unreachable code");
+            warned = true;
+        }
+
+        s->accept(*this);
+
+        if (dynamic_cast<const ExitNode*>(s.get()))
+        {
+            dead = true;
+        }
+    }
+}
+
 llvm::Value* SemanticChecker::visit_block(BlockNode& n)
 {
     scopes.emplace_back();
-    for (auto& s : n.stmts) s->accept(*this);
+    check_stmt_list(n.stmts);
     scopes.pop_back();
     return nullptr;
 }

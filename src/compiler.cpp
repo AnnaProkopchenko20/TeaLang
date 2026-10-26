@@ -122,6 +122,11 @@ namespace
         SemanticChecker checker;
         program->accept(checker);
 
+        for (const auto& w : checker.warnings)
+        {
+            std::cerr << w << "\n";
+        }
+
         CodeGen cg;
         program->accept(cg);
 

@@ -52,8 +52,10 @@ public:
 
     std::map<std::string, StructInfo> structs;
     std::map<std::string, GlobalDeclNode*> global_constants;
+    std::vector<std::string> warnings;
 
 private:
+    void check_stmt_list(const std::vector<std::unique_ptr<StmtNode>>& stmts);
     using Scope = std::map<std::string, DeclNode*>;
     std::vector<Scope> scopes;
     std::map<std::string, FunctionDeclNode*> functions;
