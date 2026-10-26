@@ -8,6 +8,7 @@
 
 #include "lexer.h"
 #include "parser.h"
+#include "semantic_checker.h"
 
 namespace
 {
@@ -104,7 +105,11 @@ namespace
         if (opts.print_ast)
         {
             program->dump(0);
+            return 0;
         }
+
+        SemanticChecker checker;
+        program->accept(checker);
 
         return 0;
     }

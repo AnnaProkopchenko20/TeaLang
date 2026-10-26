@@ -23,8 +23,8 @@ llvm_map_components_to_libnames(llvm_libs core support)
 # Collect source files under src/
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
-# Exclude codegen.cpp and semantic_checker.cpp from compilation
-list(FILTER SOURCES EXCLUDE REGEX ".*(codegen|semantic_checker)\\.cpp$")
+# Exclude codegen.cpp from compilation
+list(FILTER SOURCES EXCLUDE REGEX ".*(codegen)\\.cpp$")
 
 add_executable(compiler ${SOURCES})
 
