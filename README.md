@@ -384,7 +384,8 @@ starting at 1, with columns counted in characters.
 fields and flags of each node: the type and `const` / `відкрита` flag of a
 declaration, the parameter and result types of a function, the mutability of a
 field, the arguments of a call, and whether a chain ends in a member call.
-Global constants are `GlobalDecl` nodes at the start of the program.
+Global constants are `GlobalDecl` nodes at the start of the program, printing
+`GlobalDecl <name> <type> const` followed by the indented constant expression.
 
 ## Tests
 
@@ -415,6 +416,34 @@ Due to grammar and language changes that intentionally broke backward compatibil
 * **Final exit required (Rule P2):** Every body must end with an exit statement (`чайна_перерва`). Stage 1 tests in `tests/ok/` that did not have an exit statement were updated by appending `чайна_перерва 0` to preserve the feature under test while satisfying the new rule.
 * **`tests/ok/empty_program` (deleted):** An empty file contains no statements and thus has no exit statement, which is now a syntax error under Rule P2. It was intentionally deleted.
 * **`tests/err/lex_invalid_char_hash_in_if` (deleted):** The `#` character is now recognized as a comment to the end of the line instead of an invalid byte; this test was intentionally deleted.
+
+## Summary of Stage 2 Changes
+
+The following changes were made to complete Stage 2 of the compiler:
+
+1. **Comments (`#` to end of line):**
+   - Implemented `CommentState` in the lexer state machine.
+   - `#` anywhere outside string literals discards characters until newline (`\n` or `\r\n`).
+   - Line numbers and character column tracking remain exact. `#` within string literals continues to be treated as a literal character.
+
+2. **Global Constants (`факт`):**
+   - Added keyword `факт` and grammar rule `global_decl ::= "факт" primitive_type identifier ":=" const_expression NL`.
+   - Placed global declarations at the top of program files before structures, functions, and statements (`P1`).
+   - Added `GlobalDeclNode` (inherits from `DeclNode`) and `parse_const_expression` supporting literals, earlier constant references, arithmetic (`+`, `-`, `*`), comparisons (`==`, `!=`), and boolean negation (`!`).
+   - Constant expressions are folded at compile time with integer overflow checking (`__builtin_add_overflow`, etc.) for `i32` and `i64` (`C2`).
+   - Global constants share a unified namespace with structures and functions (`C5`), and are visible in all functions and member functions (`C3`).
+   - Code generator emits global constants directly as `llvm::ConstantInt` without memory allocations or load instructions.
+
+3. **Exit Anywhere & Final Exit Enforcement:**
+   - Every program body, function body, and member function body must terminate with `чайна_перерва <factor>` (`P2`).
+   - Earlier `чайна_перерва` statements are permitted anywhere within bodies and blocks.
+   - Any statement following an exit statement in the same statement list triggers a compile-time warning: `warning: line L:C: unreachable code` printed once per body/block to `stderr` (`P3`). Compilation still succeeds with exit code 0.
+   - Code generator ceases emitting LLVM IR instructions following an exit statement in a basic block, preventing unneeded or unreachable instructions.
+
+4. **Testing Suite & Runner Enhancements:**
+   - Updated existing Stage 1 tests to comply with final exit rules.
+   - Added end-to-end (`e2e`) execution support to `run.sh` with `lli`, standard input piping (`.in`), output comparison (`.expected`), and warning checking (`.warn`).
+   - Added 58 new tests (18 AST ok tests, 29 error tests, 11 e2e execution tests) thoroughly validating comments, constant folding, namespaces, lookup hierarchies, function isolation, dead code warnings, and runtime execution.
 
 ## Project layout
 
