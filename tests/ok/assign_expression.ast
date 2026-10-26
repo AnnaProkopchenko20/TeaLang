@@ -5,3 +5,5 @@ Program
     BinOp +
       Var x
       Const 1
+  чайна_перерва
+    Const 0

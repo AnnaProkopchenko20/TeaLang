@@ -21,3 +21,5 @@ Program
       Block
         чайна_перерва
           Const 3
+  чайна_перерва
+    Const 0

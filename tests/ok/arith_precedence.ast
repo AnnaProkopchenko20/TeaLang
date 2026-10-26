@@ -5,3 +5,5 @@ Program
       BinOp *
         Const 2
         Const 3
+  чайна_перерва
+    Const 0
