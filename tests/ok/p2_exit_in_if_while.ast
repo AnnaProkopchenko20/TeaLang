@@ -1,0 +1,13 @@
+Program
+  допоки
+    Bool повне
+    Block
+      якщо
+        Bool повне
+        Block
+          чайна_перерва
+            Const 7
+      чайна_перерва
+        Const 8
+  чайна_перерва
+    Const 0
