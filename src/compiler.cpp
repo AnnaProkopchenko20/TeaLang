@@ -4,8 +4,14 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
+#include <llvm/IR/Verifier.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/raw_ostream.h>
+
+#include "codegen.h"
 #include "lexer.h"
 #include "parser.h"
 #include "semantic_checker.h"
@@ -19,6 +25,7 @@ namespace
         bool print_ast = false;
         bool print_tokens = false;
         std::string input_path;
+        std::string output_path;
     };
 
     // ---- command line ----
@@ -49,6 +56,10 @@ namespace
         }
 
         opts.input_path = files[0];
+        if (files.size() > 1)
+        {
+            opts.output_path = files[1];
+        }
         return true;
     }
 
@@ -110,6 +121,28 @@ namespace
 
         SemanticChecker checker;
         program->accept(checker);
+
+        CodeGen cg;
+        program->accept(cg);
+
+        if (llvm::verifyModule(*cg.module, &llvm::errs()))
+        {
+            throw std::runtime_error("internal error: generated IR is invalid");
+        }
+
+        if (!opts.output_path.empty())
+        {
+            std::error_code ec;
+            llvm::raw_fd_ostream out(opts.output_path, ec, llvm::sys::fs::OF_None);
+            if (ec)
+            {
+                std::cerr << "Error opening output file: " << ec.message() << "\n";
+                return 1;
+            }
+            cg.module->print(out, nullptr);
+            out.flush();
+            out.close();
+        }
 
         return 0;
     }
