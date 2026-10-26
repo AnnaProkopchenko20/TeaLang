@@ -54,6 +54,128 @@ void SemanticChecker::check_new_name(const Node& at, const std::string& name)
         fail(at, "'" + name + "' is already declared");
 }
 
+void SemanticChecker::check_decl_name(const Node& at, const std::string& name)
+{
+    check_new_name(at, name);
+    if (struct_names.count(name))
+        fail(at, "name '" + name + "' is already used by a structure");
+    if (function_names.count(name))
+        fail(at, "name '" + name + "' is already used by a function");
+    if (current_struct_info)
+    {
+        if (current_struct_info->member_fns.count(name))
+            fail(at, "name '" + name + "' is already used by a function");
+    }
+}
+
+SemanticChecker::ConstValue SemanticChecker::evaluate_const_expr(ExprNode& expr)
+{
+    if (auto* num = dynamic_cast<NumberNode*>(&expr))
+    {
+        errno = 0;
+        char* endptr = nullptr;
+        long long v = std::strtoll(num->text.c_str(), &endptr, 10);
+        if (errno == ERANGE)
+            fail(*num, "constant " + num->text + " does not fit in " + kw::I64);
+        num->type = (v >= INT32_MIN && v <= INT32_MAX) ? kw::I32 : kw::I64;
+        num->value = v;
+        return {num->type, v, false};
+    }
+
+    if (auto* b = dynamic_cast<BoolNode*>(&expr))
+    {
+        b->type = kw::BOOL;
+        return {kw::BOOL, 0, b->value};
+    }
+
+    if (auto* v = dynamic_cast<VarNameNode*>(&expr))
+    {
+        auto it = global_constants.find(v->name);
+        if (it == global_constants.end())
+            fail(*v, "variable '" + v->name + "' is used before its declaration");
+        GlobalDeclNode* gdecl = it->second;
+        v->decl = gdecl;
+        v->type = gdecl->type_name;
+        if (is_bool(gdecl->type_name))
+            return {kw::BOOL, 0, gdecl->folded_bool};
+        else
+            return {canonical_type(gdecl->type_name), gdecl->folded_int, false};
+    }
+
+    if (auto* not_node = dynamic_cast<NotNode*>(&expr))
+    {
+        ConstValue cv = evaluate_const_expr(*not_node->expr);
+        if (!is_bool(cv.type))
+            fail(*not_node, "cannot apply '!' to " + cv.type);
+        not_node->type = kw::BOOL;
+        return {kw::BOOL, 0, !cv.bool_val};
+    }
+
+    if (auto* bin = dynamic_cast<BinaryOpNode*>(&expr))
+    {
+        ConstValue left_val = evaluate_const_expr(*bin->left);
+        ConstValue right_val = evaluate_const_expr(*bin->right);
+        const std::string& lt = left_val.type;
+        const std::string& rt = right_val.type;
+
+        if (bin->op == "+" || bin->op == "-" || bin->op == "*")
+        {
+            if (!is_int(lt)) fail(*bin, "cannot apply '" + bin->op + "' to " + lt);
+            if (!is_int(rt)) fail(*bin, "cannot apply '" + bin->op + "' to " + rt);
+
+            if (is_i64(lt) || is_i64(rt))
+            {
+                bin->type = kw::I64;
+                int64_t res = 0;
+                bool overflow = false;
+                if (bin->op == "+")
+                    overflow = __builtin_add_overflow(left_val.int_val, right_val.int_val, &res);
+                else if (bin->op == "-")
+                    overflow = __builtin_sub_overflow(left_val.int_val, right_val.int_val, &res);
+                else if (bin->op == "*")
+                    overflow = __builtin_mul_overflow(left_val.int_val, right_val.int_val, &res);
+
+                if (overflow)
+                    fail(*bin, "tea overflow: integer overflow in constant expression");
+                return {kw::I64, res, false};
+            }
+            else
+            {
+                bin->type = kw::I32;
+                int32_t res = 0;
+                bool overflow = false;
+                int32_t l32 = static_cast<int32_t>(left_val.int_val);
+                int32_t r32 = static_cast<int32_t>(right_val.int_val);
+                if (bin->op == "+")
+                    overflow = __builtin_add_overflow(l32, r32, &res);
+                else if (bin->op == "-")
+                    overflow = __builtin_sub_overflow(l32, r32, &res);
+                else if (bin->op == "*")
+                    overflow = __builtin_mul_overflow(l32, r32, &res);
+
+                if (overflow)
+                    fail(*bin, "tea overflow: integer overflow in constant expression");
+                return {kw::I32, res, false};
+            }
+        }
+        else if (bin->op == "==" || bin->op == "!=")
+        {
+            bool ok = (is_int(lt) && is_int(rt)) || (is_bool(lt) && is_bool(rt));
+            if (!ok) fail(*bin, "cannot compare " + lt + " with " + rt);
+            bin->type = kw::BOOL;
+            bool equal = false;
+            if (is_int(lt))
+                equal = (left_val.int_val == right_val.int_val);
+            else
+                equal = (left_val.bool_val == right_val.bool_val);
+            bool res = (bin->op == "==") ? equal : !equal;
+            return {kw::BOOL, 0, res};
+        }
+    }
+
+    fail(expr, "not a constant expression");
+}
+
 SemanticChecker::LookupResult SemanticChecker::lookup_name(const std::string& name)
 {
     for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
@@ -71,13 +193,18 @@ SemanticChecker::LookupResult SemanticChecker::lookup_name(const std::string& na
             return {LookupResult::FieldOfThis, nullptr, fit->second, fi.type, fi.is_mut};
         }
     }
+    auto git = global_constants.find(name);
+    if (git != global_constants.end())
+    {
+        return {LookupResult::Constant, git->second, -1, git->second->type_name, false};
+    }
     return {LookupResult::NotFound, nullptr, -1, "", false};
 }
 
 DeclNode* SemanticChecker::lookup(const Node& at, const std::string& name)
 {
     auto res = lookup_name(name);
-    if (res.kind == LookupResult::LocalVar)
+    if (res.kind == LookupResult::LocalVar || res.kind == LookupResult::Constant)
         return res.decl;
     fail(at, "variable '" + name + "' is used before its declaration");
 }
@@ -284,17 +411,13 @@ void SemanticChecker::check_init_item(std::unique_ptr<ExprNode>& item, const std
 
 llvm::Value* SemanticChecker::visit_struct_decl(StructDeclNode& n)
 {
-    check_new_name(n, n.name);
-    if (structs.count(n.name))
-        fail(n, "struct '" + n.name + "' is already declared");
-
     StructInfo sinfo;
     sinfo.name = n.name;
 
     for (size_t i = 0; i < n.fields.size(); ++i)
     {
         const auto& f = n.fields[i];
-        check_new_name(*f, f->name);
+        check_decl_name(*f, f->name);
         if (sinfo.field_index.count(f->name))
             fail(*f, "field '" + f->name + "' is already declared in struct '" + n.name + "'");
 
@@ -308,17 +431,12 @@ llvm::Value* SemanticChecker::visit_struct_decl(StructDeclNode& n)
 
 llvm::Value* SemanticChecker::visit_fn_decl(FunctionDeclNode& n)
 {
-    check_new_name(n, n.name);
     current_fn = &n;
 
+    scopes.clear();
     scopes.emplace_back();
     for (const auto& p : n.params)
     {
-        check_new_name(*p, p->name);
-        if (!is_known_type(p->type_name))
-            fail(*p, "unknown type '" + p->type_name + "'");
-        if (scopes.back().count(p->name))
-            fail(*p, "parameter '" + p->name + "' is already declared");
         scopes.back()[p->name] = p->decl.get();
     }
 
@@ -333,14 +451,10 @@ llvm::Value* SemanticChecker::visit_member_fn_decl(MemberFnDeclNode& n)
 {
     current_member_fn = &n;
 
+    scopes.clear();
     scopes.emplace_back();
     for (const auto& p : n.params)
     {
-        check_new_name(*p, p->name);
-        if (!is_known_type(p->type_name))
-            fail(*p, "unknown type '" + p->type_name + "'");
-        if (scopes.back().count(p->name))
-            fail(*p, "parameter '" + p->name + "' is already declared");
         scopes.back()[p->name] = p->decl.get();
     }
 
@@ -353,7 +467,77 @@ llvm::Value* SemanticChecker::visit_member_fn_decl(MemberFnDeclNode& n)
 
 llvm::Value* SemanticChecker::visit_program(ProgramNode& n)
 {
-    // Phase 1: Register all struct names and fields
+    // Phase 0: Name pre-pass (Rule C5: constants, structs, top-level functions share one namespace)
+    struct TopEntity {
+        std::string kind;
+        int line;
+        int col;
+    };
+    std::map<std::string, TopEntity> top_level_names;
+    struct_names.clear();
+    function_names.clear();
+
+    auto register_top_name = [&](const Node& at, const std::string& name, const std::string& kind) {
+        check_new_name(at, name);
+        auto it = top_level_names.find(name);
+        if (it != top_level_names.end()) {
+            fail(at, "name '" + name + "' is already declared as a " + it->second.kind);
+        }
+        top_level_names[name] = {kind, at.line, at.col};
+    };
+
+    for (auto& g : n.globals) {
+        register_top_name(*g, g->name, "constant");
+    }
+    for (auto& s : n.structs) {
+        register_top_name(*s, s->name, "structure");
+        struct_names.insert(s->name);
+    }
+    for (auto& fn : n.functions) {
+        register_top_name(*fn, fn->name, "function");
+        function_names.insert(fn->name);
+    }
+
+    // Phase 1: Global constants evaluation (in declaration order)
+    global_constants.clear();
+    for (auto& g : n.globals) {
+        ConstValue val = evaluate_const_expr(*g->const_expr);
+        const std::string& want = g->type_name;
+        const std::string& have = val.type;
+
+        if (is_i32(want)) {
+            if (is_bool(have)) {
+                fail(*g, "cannot initialise constant of type " + kw::type_keyword(want) + " with a value of type " + kw::type_keyword(have));
+            }
+            if (is_i64(have)) {
+                if (auto* num = dynamic_cast<const NumberNode*>(g->const_expr.get()))
+                    fail(num->line, num->col, "tea overflow: constant " + num->text + " does not fit in " + kw::type_keyword(want));
+                fail(*g, "tea overflow: cannot narrow " + kw::type_keyword(have) + " to " + kw::type_keyword(want));
+            }
+            if (val.int_val < INT32_MIN || val.int_val > INT32_MAX) {
+                fail(*g, "tea overflow: constant does not fit in " + kw::type_keyword(want));
+            }
+            g->folded_int = val.int_val;
+            g->const_expr->type = kw::I32;
+        } else if (is_i64(want)) {
+            if (is_bool(have)) {
+                fail(*g, "cannot initialise constant of type " + kw::type_keyword(want) + " with a value of type " + kw::type_keyword(have));
+            }
+            g->folded_int = val.int_val;
+            g->const_expr->type = kw::I64;
+        } else if (is_bool(want)) {
+            if (!is_bool(have)) {
+                fail(*g, "cannot initialise constant of type " + kw::type_keyword(want) + " with a value of type " + kw::type_keyword(have));
+            }
+            g->folded_bool = val.bool_val;
+            g->const_expr->type = kw::BOOL;
+        }
+
+        global_constants[g->name] = g.get();
+    }
+
+    // Phase 2: Register all struct names and fields
+    structs.clear();
     for (auto& s : n.structs)
     {
         for (auto& m : s->member_fns)
@@ -361,7 +545,7 @@ llvm::Value* SemanticChecker::visit_program(ProgramNode& n)
         visit_struct_decl(*s);
     }
 
-    // Phase 2: Register member function headers and check field validity
+    // Phase 3: Register member function headers and check field validity
     for (auto& s : n.structs)
     {
         current_struct_info = &structs[s->name];
@@ -383,40 +567,39 @@ llvm::Value* SemanticChecker::visit_program(ProgramNode& n)
             if (current_struct_info->member_fns.count(m->name))
                 fail(*m, "member function '" + m->name + "' is already declared in struct '" + s->name + "'");
 
+            current_struct_info->member_fns[m->name] = m.get();
+        }
+
+        for (auto& m : s->member_fns)
+        {
             if (!is_known_type(m->return_type))
                 fail(*m, "unknown return type '" + m->return_type + "'");
 
             std::set<std::string> param_names;
             for (const auto& p : m->params)
             {
-                check_new_name(*p, p->name);
+                check_decl_name(*p, p->name);
                 if (!is_known_type(p->type_name))
                     fail(*p, "unknown type '" + p->type_name + "'");
                 if (param_names.count(p->name))
                     fail(*p, "parameter '" + p->name + "' is already declared");
                 param_names.insert(p->name);
             }
-
-            current_struct_info->member_fns[m->name] = m.get();
         }
         current_struct_info = nullptr;
     }
 
-    // Phase 3: Register global functions
+    // Phase 4: Register global functions
+    functions.clear();
     for (auto& fn : n.functions)
     {
-        check_new_name(*fn, fn->name);
-        if (structs.count(fn->name))
-            fail(*fn, "'" + fn->name + "' is already declared");
-        if (functions.count(fn->name))
-            fail(*fn, "function '" + fn->name + "' is already declared");
         if (!is_known_type(fn->return_type))
             fail(*fn, "unknown return type '" + fn->return_type + "'");
 
         std::set<std::string> param_names;
         for (const auto& p : fn->params)
         {
-            check_new_name(*p, p->name);
+            check_decl_name(*p, p->name);
             if (!is_known_type(p->type_name))
                 fail(*p, "unknown type '" + p->type_name + "'");
             if (param_names.count(p->name))
@@ -427,7 +610,7 @@ llvm::Value* SemanticChecker::visit_program(ProgramNode& n)
         functions[fn->name] = fn.get();
     }
 
-    // Phase 4: Check member function bodies
+    // Phase 5: Check member function bodies
     in_member_body_pass = true;
     for (auto& s : n.structs)
     {
@@ -444,7 +627,7 @@ llvm::Value* SemanticChecker::visit_program(ProgramNode& n)
     }
     in_member_body_pass = false;
 
-    // Phase 5: Fixed point iteration for mutating member functions
+    // Phase 6: Fixed point iteration for mutating member functions
     for (auto* m : directly_mutates)
         m->mutates = true;
 
@@ -469,7 +652,7 @@ llvm::Value* SemanticChecker::visit_program(ProgramNode& n)
         }
     }
 
-    // Phase 6: Validate deferred call sites
+    // Phase 7: Validate deferred call sites
     for (const auto& call : deferred_calls)
     {
         if (call.target->mutates)
@@ -481,15 +664,17 @@ llvm::Value* SemanticChecker::visit_program(ProgramNode& n)
         }
     }
 
-    // Phase 7: Check global function bodies, top-level statements
+    // Phase 8: Check global function bodies
     for (auto& fn : n.functions)
         visit_fn_decl(*fn);
 
+    // Phase 9: Top-level statements
     scopes.clear();
     scopes.emplace_back();
     current_fn = nullptr;
     current_struct_info = nullptr;
     for (auto& s : n.stmts) s->accept(*this);
+    scopes.pop_back();
 
     return nullptr;
 }
@@ -504,7 +689,7 @@ llvm::Value* SemanticChecker::visit_block(BlockNode& n)
 
 llvm::Value* SemanticChecker::visit_decl(DeclNode& n)
 {
-    check_new_name(n, n.name);
+    check_decl_name(n, n.name);
     if (scopes.back().count(n.name))
         fail(n, "variable '" + n.name + "' is already declared in this block");
 
@@ -586,6 +771,11 @@ llvm::Value* SemanticChecker::visit_exit(ExitNode& n)
     if (current_fn)
     {
         check_assignable(*n.expr, current_fn->return_type, n, "return");
+    }
+    else
+    {
+        if (!is_builtin_type(n.expr->type))
+            fail(n, "exit operand must have a built-in type");
     }
     return nullptr;
 }

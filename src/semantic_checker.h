@@ -51,11 +51,15 @@ public:
     llvm::Value* visit_global_decl(GlobalDeclNode& n)       override;
 
     std::map<std::string, StructInfo> structs;
+    std::map<std::string, GlobalDeclNode*> global_constants;
 
 private:
     using Scope = std::map<std::string, DeclNode*>;
     std::vector<Scope> scopes;
     std::map<std::string, FunctionDeclNode*> functions;
+
+    std::set<std::string> struct_names;
+    std::set<std::string> function_names;
 
     FunctionDeclNode* current_fn          = nullptr;
     StructDeclNode*   current_struct_node = nullptr;
@@ -81,9 +85,17 @@ private:
     bool is_builtin_type(const std::string& t);
     bool is_known_type(const std::string& t);
     void check_new_name(const Node& at, const std::string& name);
+    void check_decl_name(const Node& at, const std::string& name);
+
+    struct ConstValue {
+        std::string type;
+        int64_t int_val = 0;
+        bool bool_val = false;
+    };
+    ConstValue evaluate_const_expr(ExprNode& expr);
 
     struct LookupResult {
-        enum Kind { NotFound, LocalVar, FieldOfThis };
+        enum Kind { NotFound, LocalVar, FieldOfThis, Constant };
         Kind kind = NotFound;
         DeclNode* decl = nullptr;
         int field_index = -1;

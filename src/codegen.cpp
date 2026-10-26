@@ -488,6 +488,14 @@ llvm::Value* CodeGen::visit_this(ThisNode&)
 
 llvm::Value* CodeGen::visit_var(VarNameNode& n)
 {
+    if (auto* g = dynamic_cast<GlobalDeclNode*>(n.decl))
+    {
+        if (is_bool(g->type_name))
+            return llvm::ConstantInt::get(i1_type, g->folded_bool ? 1 : 0);
+        if (is_i64(g->type_name))
+            return llvm::ConstantInt::get(i64_type, g->folded_int);
+        return llvm::ConstantInt::get(i32_type, (int32_t)g->folded_int);
+    }
     llvm::AllocaInst* a = allocas[n.decl];
     return builder.CreateLoad(llvm_type(n.decl->type_name), a, n.name);
 }
