@@ -122,6 +122,7 @@ namespace
         SemanticChecker checker;
         program->accept(checker);
 
+        // WP6: Print warnings after successful semantic pass only
         for (const auto& w : checker.warnings)
         {
             std::cerr << w << "\n";
