@@ -128,12 +128,119 @@ void Parser::end_of_line()
 
 // ------------------------------------------------------------ grammar
 
-enum class ProgramSection { Structs, Functions, Statements };
+// global_decl ::= "факт" primitive_type identifier ":=" const_expression NL
+unique_ptr<GlobalDeclNode> Parser::parse_global_decl()
+{
+    Token kw_tok = eat(); // 'факт'
 
-// program ::= { struct } { fn } { statement }
+    if (at("keyword", kw::MUT))
+    {
+        throw error_at(*peek(), "constants cannot be mutable");
+    }
+
+    if (!at_primitive_type())
+    {
+        throw error_at(*peek(), "constants must have a built-in type");
+    }
+    Token type_tok = eat();
+
+    Token name_tok = expect("identifier", "", "a constant name");
+    expect("operator", ":=", "':='");
+    auto expr = parse_const_expression();
+    end_of_line();
+
+    return make_unique<GlobalDeclNode>(
+        kw_tok.line, kw_tok.col,
+        type_tok.text, name_tok.text, std::move(expr));
+}
+
+// const_expression ::= const_arith [ ( "==" | "!=" ) const_arith ]
+unique_ptr<ExprNode> Parser::parse_const_expression()
+{
+    auto node = parse_const_arith();
+    if (at("operator", "==") || at("operator", "!="))
+    {
+        Token op = eat();
+        auto right = parse_const_arith();
+        node = make_unique<BinaryOpNode>(op.line, op.col, op.text, std::move(node), std::move(right));
+    }
+    return node;
+}
+
+// const_arith ::= const_term { ( "+" | "-" ) const_term }
+unique_ptr<ExprNode> Parser::parse_const_arith()
+{
+    auto node = parse_const_term();
+    while (at("operator", "+") || at("operator", "-"))
+    {
+        Token op = eat();
+        auto right = parse_const_term();
+        node = make_unique<BinaryOpNode>(op.line, op.col, op.text, std::move(node), std::move(right));
+    }
+    return node;
+}
+
+// const_term ::= const_factor { "*" const_factor }
+unique_ptr<ExprNode> Parser::parse_const_term()
+{
+    auto node = parse_const_factor();
+    while (at("operator", "*"))
+    {
+        Token op = eat();
+        auto right = parse_const_factor();
+        node = make_unique<BinaryOpNode>(op.line, op.col, op.text, std::move(node), std::move(right));
+    }
+    return node;
+}
+
+// const_factor ::= number | "повне" | "пусте" | "!" const_factor | identifier
+unique_ptr<ExprNode> Parser::parse_const_factor()
+{
+    if (at("operator", "!"))
+    {
+        Token op = eat();
+        return make_unique<NotNode>(op.line, op.col, parse_const_factor());
+    }
+    if (at("number"))
+    {
+        Token t = eat();
+        return make_unique<NumberNode>(t.line, t.col, t.text);
+    }
+    if (at("keyword", kw::TRUE_))
+    {
+        Token t = eat();
+        return make_unique<BoolNode>(t.line, t.col, true);
+    }
+    if (at("keyword", kw::FALSE_))
+    {
+        Token t = eat();
+        return make_unique<BoolNode>(t.line, t.col, false);
+    }
+    if (at("keyword", kw::READ))
+    {
+        throw error_at(*peek(), "read() is not allowed in constant expressions");
+    }
+    if (at("identifier"))
+    {
+        Token t = eat();
+        if (at("paren", "("))
+        {
+            throw error_at(*peek(), "calls are not allowed in constant expressions");
+        }
+        if (at("dot", "."))
+        {
+            throw error_at(*peek(), "fields are not allowed in constant expressions");
+        }
+        return make_unique<VarNameNode>(t.line, t.col, t.text);
+    }
+
+    throw error("expected a constant expression");
+}
+
+// program ::= { global_decl } { struct } { fn } body
 unique_ptr<ProgramNode> Parser::parse_program()
 {
-    ProgramSection section = ProgramSection::Structs;
+    vector<unique_ptr<GlobalDeclNode>> globals;
     vector<unique_ptr<StructDeclNode>> structs;
     vector<unique_ptr<FunctionDeclNode>> functions;
     vector<unique_ptr<StmtNode>> stmts;
@@ -145,35 +252,43 @@ unique_ptr<ProgramNode> Parser::parse_program()
         first_col = (*f)[0].col;
     }
 
+    // 1. Global declarations
     while (peek_line())
     {
+        const auto& next_toks = *peek_line();
+        if (next_toks.empty() || next_toks[0].kind != "keyword" || next_toks[0].text != kw::FACT)
+            break;
         next_line();
-
-        if (at("keyword", kw::STRUCT))
-        {
-            if (section > ProgramSection::Structs)
-            {
-                throw error_at(toks[0], "struct declarations come before functions");
-            }
-            structs.push_back(parse_struct_decl());
-        }
-        else if (at("keyword", kw::FN))
-        {
-            if (section > ProgramSection::Functions)
-            {
-                throw error_at(toks[0], "function declarations come before the statements");
-            }
-            section = ProgramSection::Functions;
-            functions.push_back(parse_fn_decl());
-        }
-        else
-        {
-            section = ProgramSection::Statements;
-            stmts.push_back(parse_statement());
-        }
+        globals.push_back(parse_global_decl());
     }
 
-    return make_unique<ProgramNode>(first_line, first_col, std::move(structs), std::move(functions), std::move(stmts));
+    // 2. Struct declarations
+    while (peek_line())
+    {
+        const auto& next_toks = *peek_line();
+        if (next_toks.empty() || next_toks[0].kind != "keyword" || next_toks[0].text != kw::STRUCT)
+            break;
+        next_line();
+        structs.push_back(parse_struct_decl());
+    }
+
+    // 3. Function declarations
+    while (peek_line())
+    {
+        const auto& next_toks = *peek_line();
+        if (next_toks.empty() || next_toks[0].kind != "keyword" || next_toks[0].text != kw::FN)
+            break;
+        next_line();
+        functions.push_back(parse_fn_decl());
+    }
+
+    // 4. Program body
+    Token dummy_open{ "block", "{", first_line, first_col };
+    stmts = parse_body(/*is_function=*/false, /*fn_name=*/"", dummy_open);
+
+    return make_unique<ProgramNode>(
+        first_line, first_col,
+        std::move(globals), std::move(structs), std::move(functions), std::move(stmts));
 }
 
 // struct ::= "struct" ident NL "{" NL field_decl { field_decl } { fn } "}" NL
@@ -211,6 +326,11 @@ unique_ptr<StructDeclNode> Parser::parse_struct_decl()
             throw error_at(open, "'{' is never closed");
         }
         next_line();
+
+        if (at("keyword", kw::FACT))
+        {
+            throw error_at(toks[0], "constant declarations must come before structures, functions and statements");
+        }
 
         if (at("block", "}"))
         {
@@ -318,7 +438,25 @@ unique_ptr<FunctionDeclNode> Parser::parse_fn_decl()
     Token ret_type = expect_type();
     end_of_line();
 
-    auto body = parse_fn_body(name.text, kw_tok);
+    const vector<Token>* nl = peek_line();
+    if (!nl)
+    {
+        throw std::runtime_error(
+            where(toks.back().line + 1, 1) +
+            "expected '{' on its own line after '" + kw_tok.text + "', found end of file");
+    }
+    if (!((*nl)[0].kind == "block" && (*nl)[0].text == "{"))
+    {
+        throw error_at((*nl)[0],
+            "expected '{' on its own line after '" + kw_tok.text + "', got '" + (*nl)[0].text + "'");
+    }
+
+    next_line();
+    Token open = eat();
+    end_of_line();
+
+    auto stmts = parse_body(/*is_function=*/true, name.text, open);
+    auto body = make_unique<BlockNode>(open.line, open.col, std::move(stmts));
 
     return make_unique<FunctionDeclNode>(
         kw_tok.line, kw_tok.col,
@@ -338,27 +476,6 @@ unique_ptr<MemberFnDeclNode> Parser::parse_member_fn()
     Token ret_type = expect_type();
     end_of_line();
 
-    auto body = parse_fn_body(name.text, kw_tok);
-
-    return make_unique<MemberFnDeclNode>(
-        kw_tok.line, kw_tok.col,
-        name.text, ret_type.text,
-        std::move(params), std::move(body));
-}
-
-// param ::= type ident
-unique_ptr<FuncParamNode> Parser::parse_param()
-{
-    Token type_tok = expect_type();
-    Token name_tok = expect("identifier", "", "a parameter name");
-    return make_unique<FuncParamNode>(
-        type_tok.line, type_tok.col,
-        type_tok.text, name_tok.text);
-}
-
-// function body block: must end with exit, no statement after exit in same block
-unique_ptr<BlockNode> Parser::parse_fn_body(const string& name, const Token& kw_tok)
-{
     const vector<Token>* nl = peek_line();
     if (!nl)
     {
@@ -376,49 +493,122 @@ unique_ptr<BlockNode> Parser::parse_fn_body(const string& name, const Token& kw_
     Token open = eat();
     end_of_line();
 
+    auto stmts = parse_body(/*is_function=*/true, name.text, open);
+    auto body = make_unique<BlockNode>(open.line, open.col, std::move(stmts));
+
+    return make_unique<MemberFnDeclNode>(
+        kw_tok.line, kw_tok.col,
+        name.text, ret_type.text,
+        std::move(params), std::move(body));
+}
+
+// param ::= type ident
+unique_ptr<FuncParamNode> Parser::parse_param()
+{
+    Token type_tok = expect_type();
+    Token name_tok = expect("identifier", "", "a parameter name");
+    return make_unique<FuncParamNode>(
+        type_tok.line, type_tok.col,
+        type_tok.text, name_tok.text);
+}
+
+// body ::= { other_stmt } exit_stmt { { other_stmt } exit_stmt }
+vector<unique_ptr<StmtNode>> Parser::parse_body(bool is_function, const string& fn_name, const Token& open_tok)
+{
+    (void)fn_name;
     vector<unique_ptr<StmtNode>> stmts;
-    bool seen_exit = false;
+    bool last_was_exit = false;
+    int last_line = 1;
 
-    while (true)
+    if (is_function)
     {
-        if (!peek_line())
+        while (true)
         {
-            throw error_at(open, "'{' is never closed");
-        }
-        next_line();
-
-        if (at("block", "}"))
-        {
-            eat();
-            end_of_line();
-            if (stmts.empty() || !seen_exit)
+            if (!peek_line())
             {
-                throw error_at(kw_tok, "function '" + name + "' must end with 'exit'");
+                throw error_at(open_tok, "'{' is never closed");
             }
-            return make_unique<BlockNode>(open.line, open.col, std::move(stmts));
+            next_line();
+
+            if (at("block", "}"))
+            {
+                Token close_tok = eat();
+                end_of_line();
+                if (stmts.empty() || !last_was_exit)
+                {
+                    throw error_at(close_tok, "expected '" + string(kw::EXIT) + "'");
+                }
+                return stmts;
+            }
+
+            if (at("keyword", kw::FACT))
+            {
+                throw error_at(toks[0], "constant declarations must come before structures, functions and statements");
+            }
+
+            if (at("keyword", kw::EXIT))
+            {
+                last_was_exit = true;
+                stmts.push_back(parse_exit());
+                end_of_line();
+            }
+            else
+            {
+                last_was_exit = false;
+                stmts.push_back(parse_statement());
+            }
+        }
+    }
+    else
+    {
+        while (peek_line())
+        {
+            next_line();
+            last_line = toks[0].line;
+
+            if (at("keyword", kw::FACT))
+            {
+                throw error_at(toks[0], "constant declarations must come before structures, functions and statements");
+            }
+            if (at("keyword", kw::STRUCT))
+            {
+                throw error_at(toks[0], "struct declarations come before functions");
+            }
+            if (at("keyword", kw::FN))
+            {
+                throw error_at(toks[0], "function declarations come before the statements");
+            }
+
+            if (at("keyword", kw::EXIT))
+            {
+                last_was_exit = true;
+                stmts.push_back(parse_exit());
+                end_of_line();
+            }
+            else
+            {
+                last_was_exit = false;
+                stmts.push_back(parse_statement());
+            }
         }
 
-        if (seen_exit)
+        if (stmts.empty() || !last_was_exit)
         {
-            throw error_at(toks[0], "statement after 'exit' in the same block");
+            int err_line = stmts.empty() ? 1 : last_line + 1;
+            throw std::runtime_error(where(err_line, 1) + "expected '" + string(kw::EXIT) + "'");
         }
 
-        if (at("keyword", kw::EXIT))
-        {
-            seen_exit = true;
-            stmts.push_back(parse_exit());
-            end_of_line();
-        }
-        else
-        {
-            stmts.push_back(parse_statement());
-        }
+        return stmts;
     }
 }
 
 // statement ::= declaration | assignment | if_stmt | while_stmt | exit_stmt | print_stmt
 unique_ptr<StmtNode> Parser::parse_statement()
 {
+    if (at("keyword", kw::FACT))
+    {
+        throw error_at(toks[0], "constant declarations must come before structures, functions and statements");
+    }
     if (at("keyword", kw::MUT) || at_primitive_type())
     {
         auto s = parse_decl();

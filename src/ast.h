@@ -16,6 +16,7 @@
 #include "nodes/not_node.h"
 
 #include "nodes/decl_node.h"
+#include "nodes/global_decl_node.h"
 #include "nodes/asmt_node.h"
 #include "nodes/exit_node.h"
 #include "nodes/block_node.h"

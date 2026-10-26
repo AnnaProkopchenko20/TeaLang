@@ -66,8 +66,14 @@ private:
     std::unique_ptr<StmtNode> parse_exit();
     std::unique_ptr<IfNode> parse_if();
     std::unique_ptr<WhileNode> parse_while();
+    std::unique_ptr<GlobalDeclNode> parse_global_decl();
+    std::unique_ptr<ExprNode> parse_const_expression();
+    std::unique_ptr<ExprNode> parse_const_arith();
+    std::unique_ptr<ExprNode> parse_const_term();
+    std::unique_ptr<ExprNode> parse_const_factor();
+    std::vector<std::unique_ptr<StmtNode>> parse_body(bool is_function, const std::string& name, const Token& open_tok);
+
     std::unique_ptr<BlockNode> parse_block(const std::string& after);
-    std::unique_ptr<BlockNode> parse_fn_body(const std::string& name, const Token& kw_tok);
     std::unique_ptr<ExprNode> parse_condition(const std::string& after);
     std::unique_ptr<ExprNode> parse_expr();
     std::unique_ptr<ExprNode> parse_arith();

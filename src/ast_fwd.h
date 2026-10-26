@@ -25,4 +25,5 @@ struct MemberAccessNode;
 struct PrintNode;
 struct ReadNode;
 struct ThisNode;
+struct GlobalDeclNode;
 

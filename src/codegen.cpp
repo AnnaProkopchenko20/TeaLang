@@ -654,3 +654,8 @@ llvm::Value* CodeGen::visit_init(InitNode& n)
     }
     return val;
 }
+
+llvm::Value* CodeGen::visit_global_decl(GlobalDeclNode&)
+{
+    return nullptr;
+}

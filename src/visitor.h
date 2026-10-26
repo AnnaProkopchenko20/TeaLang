@@ -28,4 +28,5 @@ struct Visitor {
     virtual llvm::Value* visit_member_call(MemberCallNode&) = 0;
     virtual llvm::Value* visit_print(PrintNode&) = 0;
     virtual llvm::Value* visit_read(ReadNode&) = 0;
+    virtual llvm::Value* visit_global_decl(GlobalDeclNode&) = 0;
 };

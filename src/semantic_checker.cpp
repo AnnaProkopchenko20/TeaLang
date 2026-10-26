@@ -829,3 +829,8 @@ llvm::Value* SemanticChecker::visit_init(InitNode& n)
         n.type = n.items[0]->type;
     return nullptr;
 }
+
+llvm::Value* SemanticChecker::visit_global_decl(GlobalDeclNode&)
+{
+    return nullptr;
+}

@@ -67,6 +67,7 @@ struct CodeGen : Visitor
     llvm::Value* visit_print(PrintNode& n)                  override;
     llvm::Value* visit_read(ReadNode& n)                    override;
     llvm::Value* visit_init(InitNode& n)                    override;
+    llvm::Value* visit_global_decl(GlobalDeclNode& n)       override;
 
     std::string member_fn_ir_name(const std::string& struct_name, const std::string& fn_name);
     llvm::Value* get_expr_address(ExprNode& expr);
