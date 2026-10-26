@@ -3,9 +3,11 @@
 #include "assign_state.h"
 #include "equals_state.h"
 #include "ident_state.h"
+#include "minus_state.h"
 #include "negation_state.h"
 #include "number_state.h"
 #include "start_state.h"
+#include "string_state.h"
 
 inline std::unique_ptr<LexerState> makeState(StateId id)
 {
@@ -17,6 +19,8 @@ inline std::unique_ptr<LexerState> makeState(StateId id)
         case StateId::Assign:   return std::make_unique<AssignState>();
         case StateId::Equals:   return std::make_unique<EqualsState>();
         case StateId::Negation: return std::make_unique<NegationState>();
+        case StateId::Minus:    return std::make_unique<MinusState>();
+        case StateId::String:   return std::make_unique<StringState>();
     }
     return nullptr;
 }
