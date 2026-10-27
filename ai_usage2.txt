@@ -1,0 +1,472 @@
+================================================================================
+AI USAGE DISCLOSURE (ai_usage_2.txt)
+Course Project: Stage 2 - Code Generation, Functions & Structures
+Language: "tea" (C++ / llvm::IRBuilder)
+================================================================================
+
+1. TOOLS USED
+-------------
+- Tool Name: Antigravity IDE Agentic Coding Assistant (Google DeepMind / Gemini 3.8 Flash High)
+- Supporting Tools:
+  * C++17 compiler (g++ / clang++)
+  * CMake 3.22+
+  * LLVM 18 (`llvm::IRBuilder`, `lli`, `llvm-as`, `opt`)
+  * WSL2 (Ubuntu Linux environment)
+  * Git version control
+
+2. PARTS OF THE WORK: WHAT WAS TAKEN AS IT WAS, WHAT WAS CHANGED AND WHY
+-------------------------------------------------------------------------
+A. Lexer:
+   - What was taken as it was: The byte-level state-machine lexer architecture, UTF-8 2-byte Cyrillic character handling (`lexchar::isCyrillicLead`, `lexchar::isContinuation`), and token classification from Stage 1.
+   - What was changed and why:
+     * Added `kw::FACT = "факт"` to keywords table to support global constant declarations.
+     * Implemented `CommentState` (`src/states/comment_state.h`) and hooked it into `StartState` on encountering `#`. Discards characters until newline (`\n` or `\r\n`), leaving line/column character calculations intact. String literal `#` remains literal.
+
+B. Parser & AST:
+   - What was taken as it was: Recursive-descent parser structure (one method per grammar rule) and AST node hierarchy.
+   - What was changed and why:
+     * Added `GlobalDeclNode` (`src/nodes/global_decl_node.h`) inheriting from `DeclNode`.
+     * Added `parse_global_decl()` and `parse_const_expression()` (arithmetic `+ - *`, equality `== !=`, negation `!`, literals, earlier constant identifiers).
+     * Updated `parse_program()` to parse `{ global_decl } { struct } { fn } body`.
+     * Updated `parse_body()` to enforce Rule P2: every body (program body, function body, member function body) must end with an exit statement (`чайна_перерва`). Earlier exit statements are permitted anywhere.
+
+C. Semantic Analysis:
+   - What was taken as it was: The two-pass symbol collection architecture and basic type-checking framework.
+   - What was changed and why:
+     * Implemented global constant registration pre-pass with compile-time expression evaluation (`fold_const_expr`) and strict signed integer overflow checking using compiler built-ins (`__builtin_add_overflow`, `__builtin_sub_overflow`, `__builtin_mul_overflow`) for `i32` and `i64` (Rule C2).
+     * Enforced single shared namespace across global constants, structs, and top-level functions (Rule C5).
+     * Enforced Rule N2: function bodies cannot access program-level local variables.
+     * Implemented Rule N3 lookup hierarchy in member functions: `local/param -> struct field -> global constant`.
+     * Enforced Rule N6: locals, parameters, and fields cannot shadow structure or function names.
+     * Implemented Rule P3 unreachable code detection: statements after an exit statement are still type-checked, emitting `warning: line L:C: unreachable code` to stderr once per body/block, allowing compilation to succeed with exit code 0.
+     * Enforced mutability rules: verifying assignment chains (`all_fields_mut`) and prohibiting mutating member calls on constant objects.
+
+D. Code Generation:
+   - What was taken as it was: Code generation visitor using `llvm::IRBuilder<>`.
+   - What was changed and why:
+     * Global constants emit `llvm::ConstantInt` directly upon use (in `visit_var`), avoiding any heap allocations or loads.
+     * Early exit termination: `CodeGen` immediately terminates basic block emission after an exit statement in a statement list, avoiding unreachable or malformed LLVM IR.
+     * Function prefixes (`tea_fn_...`) preventing collisions with C runtime names (`main`, `printf`, `scanf`).
+     * Identified `llvm::StructType` definitions with field access via `CreateStructGEP` by numeric index from symbol table.
+
+E. Tests & Test Runner:
+   - What was taken as it was: Stage 1 test runner foundation.
+   - What was changed and why:
+     * Updated existing Stage 1 tests to comply with Rule P2 (appended `чайна_перерва 0`).
+     * Intentionally deleted obsolete tests: `tests/ok/empty_program` (violates P2) and `tests/err/lex_invalid_char_hash_in_if` (`#` is now a valid comment).
+     * Extended `run.sh` to run end-to-end tests through `lli`, feeding `.in` standard input files, comparing `.expected` stdout, and verifying `.warn` stderr.
+     * Added comprehensive test suite: 46 ok tests, 11 e2e tests, 61 err tests (118 tests total, all passing).
+
+3. WHAT WAS UNDERSTOOD
+----------------------
+In this stage, the compiler evolved from a simple linear script interpreter into a full-fledged language compiler targeting LLVM IR.
+Key concepts understood:
+1. LLVM IRBuilder Code Generation: Instead of manually building LLVM IR text via string formatting (which is prone to syntax and type mismatch bugs), `llvm::IRBuilder` provides type-safe IR generation with SSA values, basic blocks, and verification. Forward declarations of functions and structures allow mutually recursive and forward-referenced calls.
+2. Two-Pass Semantic Analysis & Symbol Tables: Compiling functions and structures requires resolving identifiers before all bodies are parsed. A signature pre-pass registers types, fields, and function prototypes, while the second pass analyzes function bodies with scoped symbol tables.
+3. Constant Folding & Integer Overflow: Evaluating constant expressions at compile time requires strict type checking and bit-width overflow detection (`i32` vs `i64`), ensuring runtime constants are statically validated.
+4. Struct Layout & Object Memory: Structures are mapped to LLVM identified struct types. Struct fields are accessed via GEP (GetElementPtr) by index, derived from the semantic symbol table rather than name lookups at runtime. Member functions are compiled as regular functions with an implicit pointer (`this`) as parameter 0.
+5. Exit Control Flow & Unreachable Code: Allowing `чайна_перерва` anywhere while mandating a final exit requires treating exits as control flow terminators while maintaining semantic checks on dead code and cleanly terminating LLVM basic blocks.
+
+================================================================================
+4. COMPLETE CONVERSATION HISTORY (CHRONOLOGICAL EXCHANGES)
+================================================================================
+
+=== CHAT TO DISCUUSS THE PROJECT AND DECIDE ON FEATURES AND HWO THEY SHOULD BE IMPLEMENTED, CREATE PROMPTS FOR Agentic AI
+https://claude.ai/share/0ad4b664-5590-416e-a236-9fe0449ce032
+
+=== Exchange 1 (step 0) ===
+You are porting code from my practice repository into my course-project compiler.
+
+Work in C++ (llvm::IRBuilder). Read before you write.
+
+
+
+## Locations
+
+- Project (target, my language "tea"): ~/CS400/project, sources in src/
+
+- Practice 5-7 code (source of the port): ~/CS400/practices/practice1/src
+
+  (this is the practice 7 version; it already contains practice 5 and 6)
+
+- Port plan: stage2_port_plan.md (read it first; it lists what to copy, merge,
+
+  keep and write new)
+
+- Verify these paths exist. If they differ, find the right ones and tell me.
+
+
+
+## Goal
+
+Make my Stage 1 language support structs with fields, functions, member functions,
+
+and the built-ins read() and print, with semantic analysis and LLVM IR code generation
+
+through the builder. Use the practice code as the starting point and adapt it to MY syntax.
+
+
+
+## Syntax of my language (the target; keep every Stage 1 construct working)
+
+- types: горнятко_32чл (i32), кухоль_64чл (i64), заповненість (bool), or a struct name
+
+- literals: повне (true), пусте (false)
+
+- declaration: [ "відкрита" ] type identifier ":=" ( expression | init ) NL
+
+  (відкрита = mutable, prefix. Without it the variable is constant)
+
+- init: "{" value { "," value } "}" , value = expression | init (inline, one line)
+
+- assignment: expression "=>" target NL, target = identifier { "." identifier }
+
+  (value on the LEFT, target on the RIGHT)
+
+- if: "якщо" "(" expression ")" NL block [ "інакше" NL block ]
+
+- while: "допоки" "(" expression ")" NL block
+
+- exit: "чайна_перерва" factor NL
+
+- struct: "struct" identifier NL "{" NL field_decl { field_decl } { fn } "}" NL
+
+  field_decl: type [ "відкрита" ] identifier NL   (modifier AFTER the type for fields)
+
+- fn: "fn" identifier ":=" "(" [ type identifier { "," type identifier } ] ")" "->" type NL block
+
+- factor additionally: field chain a.b.c, call f(args), member call a.b.f(args), read(),
+
+  "!" factor
+
+- print_stmt: "print" "(" ( string | expression ) ")" NL
+
+- keywords struct, fn, print, read are English; everything else Ukrainian.
+
+- program ::= { struct } { fn } { statement }   (same order rules as practice 6)
+
+- Statement dispatch in the parser: a statement starting with відкрита or a primitive
+
+  type keyword is a declaration; IDENT IDENT is a declaration with a struct type
+
+  (two-token lookahead); якщо / допоки / чайна_перерва / print start their statements;
+
+  anything else is an expression that must be followed by "=>" target (a call alone is
+
+  not a statement).
+
+
+
+## Mapping from the practice syntax
+
+i32/i64/bool -> горнятко_32чл/кухоль_64чл/заповненість; true/false -> повне/пусте;
+
+`i32 mut x{5}` -> `відкрита горнятко_32чл x := 5`; `x := e` -> `e => x`;
+
+`if c` -> `якщо (c)`; `else` -> `інакше`; `exit` -> `чайна_перерва`; `i32 mut x` field ->
+
+`горнятко_32чл відкрита x`.
+
+
+
+## OUT OF SCOPE for this task (do NOT implement, do NOT prepare hooks for them)
+
+1. Global constants / any global declarations. Top-level variables stay invisible to
+
+   functions, exactly as in practice 6/7. No const-expression parser, no folding.
+
+2. Comments (`#`). Do not touch the lexer for them.
+
+3. "exit anywhere" and the mandatory-final-exit `body` rule, and the "unreachable code"
+
+   error. Keep exit handling exactly as it is in my current Stage 1 code for the
+
+   top level and for blocks. For function bodies follow practice 6/7 (the block's last
+
+   statement is an exit, nothing follows an exit in the same block). If these two
+
+   conflict in some place, do not invent a resolution: stop and ask me.
+
+4. New naming restrictions beyond what the practice code already enforces, and
+
+   shadowing of globals.
+
+5. Do not edit grammar.ebnf or README.md; I will update them myself.
+
+6. Do not create ai_usage_2.txt. Do not add tests unless step 7 says so.
+
+
+
+## Rules that must hold
+
+- Hand-written lexer state machine and recursive-descent parser, one function per rule.
+
+  No regexes, split(), or generators in the compiler.
+
+- IR only through IRBuilder; the only IR text is the module the compiler prints.
+
+- Any error (lexical, syntax, semantic) is ONE line on stderr:
+
+  `compilation error: line L:C: message`, non-zero exit, no output file written.
+
+  No crash or uncaught exception may reach the user.
+
+- Semantic analysis is a separate pass before codegen. It must check argument count and
+
+  types itself; do not rely on IRBuilder to catch bad calls.
+
+- A field is reached with a gep using the index from the symbol table, never by name.
+
+- Declare every function in the module before generating any body. Prefix IR function
+
+  names (so a user fn named main or printf cannot clash). Member functions are
+
+  `<Struct>_<fn>` (prefixed too) with a first parameter that is a pointer to the object.
+
+- print: i32 with %d, i64 with %lld, bool as true/false via select between two global
+
+  strings, string literal with %s, struct by walking the field table (printf per field).
+
+  print writes a newline after its argument. read() reads one i32 with scanf into an alloca
+
+  in the entry block.
+
+- Every Stage 1 program that was valid before must still compile and behave the same.
+
+  Existing Stage 1 tests must pass after every step. Run them after each step.
+
+- Do not overwrite my entry point: in the project, main() is in src/compiler.cpp and
+
+  src/main.cpp is empty; in the practice it is the opposite. Merge CLI behaviour
+
+  (--ast, input, output.ll, no output file on error) into my existing file.
+
+- Do not copy or commit `codegen.cpp:Zone.Identifier` or any generated .ll/binaries.
+
+- Keep my ident_state.h (Cyrillic identifiers). Do not replace my existing lexer states
+
+  with the practice ones; only add what is missing (struct/fn/print/read keywords,
+
+  `->`, `.`, `,`, string literals). Check lexer_context.h: braces must be plain tokens
+
+  with the parser deciding which `{` belongs to a block and which to an init.
+
+
+
+## Method
+
+1. Read the plan, then read my project sources and the practice sources fully.
+
+   Write me a short report: which files you will copy as is, merge, keep, or write new,
+
+   and any place where the plan does not match the real code. Wait for my OK
+
+   before changing any file.
+
+2. Work on a branch named `stage2` created from the current main (do not merge).
+
+   Commit after each step below with a real message.
+
+3. Steps (run Stage 1 tests after each; stop and report if any fail):
+
+   a. Lexer: new keywords and tokens, string state.
+
+   b. AST nodes and visitor: copy practice nodes, adapt names; merge program/decl/asmt nodes.
+
+   c. Parser: structs, fn, params, init, field chains, call, member call, read, print,
+
+      new statement dispatch, assignment with a target chain. `--ast` must print the new
+
+      nodes with parameter/result types, field mutability, call arguments, and whether a
+
+      chain ends in a member call. Stage 1 dumps must not change.
+
+   d. Semantic checker: signatures first, then bodies. Struct table with field index,
+
+      type, mutability; function and member function signatures; call argument
+
+      count/types; chain existence and mutability; mutating member functions
+
+      (fixpoint) and the const-object rule; field-before-member-fn ordering; exit type vs
+
+      result type; name lookup inside a member function (params/locals, then fields);
+
+      call lookup (member fns, then global fns); reserved names read and print;
+
+      node.decl pointers. Keep my Stage 1 checks and overflow checks.
+
+   e. Codegen: struct types, function declaration pass, function bodies, member
+
+      functions, calls, read, print, entry-block allocas. Keep my if/while/exit code.
+
+   f. Smoke test: compile and run the Practice 7 example programs, translated into my
+
+      syntax, with lli or llc + clang. Report the outputs.
+
+   g. (Only if I say so) translate practice tests into tests/ in my syntax.
+
+4. At the end give me: what was copied unchanged, what was adapted and why, what you
+
+   had to write fresh, anything you were unsure about, and every spot you skipped
+
+   because it touches the out-of-scope features.
+
+
+
+If something in my request is ambiguous or conflicts with the code you find, ask me
+
+instead of guessing.
+
+
+THE stage_port plan is in the project folder
+the practices work is in practices/practice1 folder
+be aware that you are working on wsl so figure out to efficiently access everything in the beggining
+
+=== Exchange 2 (step 174) ===
+procceed
+
+=== Exchange 3 (step 364) ===
+continue
+
+=== Exchange 4 (step 595) ===
+continue
+
+=== Exchange 5 (step 607) ===
+You are adding three language changes to my compiler, which is already ported
+
+from my practice code (step 1 is finished). Work in C++ (llvm::IRBuilder) in
+
+~/CS400/project on the existing branch `stage2`. Do not merge anything.
+
+
+
+Sources of truth: grammar.ebnf and README.md in the repository (already
+
+updated, read both completely) and step2_plan_and_prompt.md (sections 1-3).
+
+Follow the plan's work packages WP0..WP8 in order.
+
+
+
+The three changes
+
+1. Comments: `#` to the end of the line (lexer only).
+
+2. Exit anywhere: every body ends with an exit (syntax error otherwise), earlier
+
+   exits are allowed, statements after an exit give the warning
+
+   `warning: line L:C: unreachable code`. The code generator emits nothing after
+
+   an exit in the same statement list.
+
+3. Global constants: `факт <builtin type> <name> := <const expression> NL`,
+
+   before structs, functions and statements, with GlobalDeclNode : DeclNode,
+
+   compile-time folding with overflow checks, shared namespace with structs
+
+   and functions, visible in functions and member functions, shadowable.
+
+
+
+Rules that must hold
+
+- Hand-written lexer state machine and recursive-descent parser, one function
+
+  per grammar rule. No regexes, split(), or generators.
+
+- IR only through IRBuilder. Semantic checks stay in the separate pass.
+
+- Any error is ONE line on stderr: `compilation error: line L:C: message`,
+
+  exit code 1, no output file, no warnings. No crash or exception may reach
+
+  the user.
+
+- Warnings: `warning: line L:C: unreachable code`, once per body or block, at
+
+  the first dead statement; the dead statements are still analysed; no warning
+
+  when both branches of an if/else end in exit; exit code 0; printed only when
+
+  compilation succeeds.
+
+- Stage 1 programs must keep working. Do NOT edit existing tests to make them
+
+  pass. If Stage 1 tests fail because of the mandatory final exit or the new
+
+  keywords, stop after WP0 and report the list.
+
+- Do not edit grammar.ebnf. In README.md change only the AST-dump paragraph, to
+
+  match the real output. If the grammar, the README and the implementation
+
+  disagree anywhere, stop and tell me what you found instead of choosing.
+
+- Do not create ai_usage_2.txt, generated .ll files, binaries or
+
+  Zone.Identifier files.
+
+
+
+Method
+
+1. Read the grammar, the README, the plan, and the current sources. Write me a
+
+   short report of what you will change per work package and wait for my OK
+
+   before editing files.
+
+2. Do the work packages in order, one commit each, and run the full test
+
+   script after each. Stop and report if something that passed before fails.
+
+3. Add the tests listed in WP7 with expected files, extend run.sh as described.
+
+4. At the end report: what changed per file, what tests were added, which rules
+
+   from the README are covered by which tests, anything you were unsure about,
+
+   and anything in the README or grammar that does not match the final
+
+   behaviour.
+
+
+
+Ask me instead of guessing when something is ambiguous.
+
+=== Exchange 6 (step 631) ===
+implement the new logic anyway but after doing that i will tell you to make a separate pass to implement new tests and fix the old ones
+
+=== Exchange 7 (step 718) ===
+continue
+
+=== Exchange 8 (step 986) ===
+continue
+
+=== Exchange 9 (step 1062) ===
+okay now review the existing old tests and fix them to test the same things without triggering the new rules errors, if not possible without changing the test topic then delete the tests
+put it in one seprate commit
+also update the readme to mentione briefly the intentionaly modififed and deleted tests and that it was made due to changes in grammar that broke backward comptability
+after that generate at least 30 more both error and ok tests to test extensively the new functionality
+you may use the already review tests from practice 1 folder as an example for them
+put in separate commit
+after that update redame summ up the made changes and stop for me to review
+
+=== Exchange 10 (step 1259) ===
+okay now update the readme, proofread grammar file and commit the update
+
+=== Exchange 11 (step 1284) ===
+continue
+
+=== Exchange 12 (step 1319) ===
+look into w07-project-stage2.pdf
+proofread whether all requirements are met
+create a summary mentioning passed and failed requirements do not do anything with code
+also create a summary of whole project architecture and rules for me to skim through
+
+=== Exchange 13 (step 1336) ===
+add the 7 missing test cases
+add our whole conversation history without missing out on any exchanges to the ai_usage2.txt
+
