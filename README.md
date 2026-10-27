@@ -448,17 +448,22 @@ The following changes were made to complete Stage 2 of the compiler:
 ## Project layout
 
 ```text
-grammar.ebnf        complete grammar (syntax and lexical rules)
-ai_usage_2.txt      AI usage disclosure
-compiler.cpp        command-line driver
-lexer.h / lexer.cpp           lexer entry point (state-machine driver)
-lexer_context.h, states/      lexer context and the individual states
-parser.h / parser.cpp         recursive-descent parser, one function per rule
-ast.h, ast_fwd.h, nodes/      AST node class hierarchy (every node keeps line:col)
-visitor.h                     visitor interface
-semantic_checker.h / .cpp     symbol table and semantic pass
-codegen.h / codegen.cpp       LLVM IR generation through IRBuilder
-keywords.h                    the only place where keywords are spelled
-tests/                        test programs and expected outputs
-run.sh                        test runner
+grammar.ebnf                  complete grammar (syntax and lexical rules)
+README.md                     project documentation and specification
+run.sh                        test runner (ok, err, and e2e suites)
+CMakeLists.txt                build configuration
+src/
+  compiler.cpp                command-line driver
+  lexer.h / lexer.cpp         lexer entry point (state-machine driver)
+  lexer_context.h, states/    lexer context and individual token states
+  parser.h / parser.cpp       recursive-descent parser, one function per rule
+  ast.h, ast_fwd.h, nodes/    AST node class hierarchy (every node keeps line:col)
+  visitor.h                   visitor interface
+  semantic_checker.h / .cpp   symbol table and semantic pass
+  codegen.h / codegen.cpp     LLVM IR generation through IRBuilder
+  keywords.h                  central definition of language keywords
+tests/
+  ok/                         valid programs and AST dumps (.txt + .ast)
+  err/                        invalid programs and expected compiler errors (.txt + .err)
+  e2e/                        runtime execution tests (.txt + .expected [+ .in] [+ .warn])
 ```
