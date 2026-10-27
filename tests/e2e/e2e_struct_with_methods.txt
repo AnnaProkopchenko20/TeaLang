@@ -1,0 +1,20 @@
+факт горнятко_32чл OFFSET := 100
+struct Counter
+{
+    горнятко_32чл відкрита count
+    fn inc := (горнятко_32чл delta) -> горнятко_32чл
+    {
+        count + delta => count
+        чайна_перерва count
+    }
+    fn get_total := () -> горнятко_32чл
+    {
+        горнятко_32чл res := count + OFFSET
+        чайна_перерва res
+    }
+}
+відкрита Counter c := {10}
+print(c.inc(5))
+print(c.get_total())
+print(c)
+чайна_перерва 0

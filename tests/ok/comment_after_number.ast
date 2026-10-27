@@ -1,0 +1,5 @@
+Program
+  Decl x горнятко_32чл const
+    Const 32
+  чайна_перерва
+    Var x

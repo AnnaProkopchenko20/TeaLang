@@ -1,0 +1,22 @@
+Program
+  GlobalDecl x горнятко_32чл const
+    Const 10
+  Struct S
+    Member x горнятко_32чл const
+    MemberFn m_param -> горнятко_32чл
+      Param x горнятко_32чл
+      Block
+        чайна_перерва
+          Var x
+    MemberFn m_field -> горнятко_32чл
+      Block
+        чайна_перерва
+          Var x
+    MemberFn m_local -> горнятко_32чл
+      Block
+        Decl x горнятко_32чл const
+          Const 99
+        чайна_перерва
+          Var x
+  чайна_перерва
+    Const 0

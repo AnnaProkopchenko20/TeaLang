@@ -48,7 +48,10 @@ public:
             ctx.emit("paren", std::string(1, (char)b), ctx.line, ctx.col);
             return true;
         }
-        if (b == '+' || b == '-' || b == '*')
+        if (b == ',') { ctx.emit("comma", ",", ctx.line, ctx.col); return true; }
+        if (b == '.') { ctx.emit("dot",   ".", ctx.line, ctx.col); return true; }
+
+        if (b == '+' || b == '*')
         {
             ctx.emit("operator", std::string(1, (char)b), ctx.line, ctx.col);
             return true;
@@ -56,8 +59,11 @@ public:
 
         // operators that need a second byte
         if (b == ':') { ctx.markStart(); ctx.changeState(StateId::Assign);   return true; }
+        if (b == '-') { ctx.markStart(); ctx.changeState(StateId::Minus);    return true; }
         if (b == '=') { ctx.markStart(); ctx.changeState(StateId::Equals);   return true; }
         if (b == '!') { ctx.markStart(); ctx.changeState(StateId::Negation); return true; }
+        if (b == '#') { ctx.changeState(StateId::Comment);   return true; }
+        if (b == '"') { ctx.markStart(); ctx.changeState(StateId::String);   return true; }
 
         ctx.fail("unexpected byte " + LexerContext::describeByte(b), ctx.line, ctx.col);
     }

@@ -1,0 +1,7 @@
+Program
+  чайна_перерва
+    Const 42
+  Decl dead горнятко_32чл const
+    Const 1
+  чайна_перерва
+    Const 0

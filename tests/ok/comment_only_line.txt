@@ -1,0 +1,5 @@
+# full line comment
+# another comment
+горнятко_32чл x := 10
+# intermediate comment
+чайна_перерва 0
