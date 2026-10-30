@@ -1,73 +1,152 @@
 (* ===================================================================
-   Grammar of the "tea" language (Ukrainian keywords), stage 1.
-   Notation: ISO-style EBNF.  { x } = zero or more, [ x ] = optional,
-   a | b = alternative, "text" = literal terminal.
-   NL = end of a source line.  The language is LINE-ORIENTED: the lexer
-   groups tokens by line and every statement ends at the end of its line.
-   Empty (or whitespace-only) lines are ignored everywhere.
+   Grammar of the "tea" language (Ukrainian keywords), stages 1-2.
+   Notation: EBNF with "::=".  { x } = zero or more, [ x ] = optional,
+   a | b = alternative, ( ... ) = grouping, "text" = literal terminal,
+   "a".."z" = a range of characters.
+   NL = end of a source line.  The language is LINE-ORIENTED: every
+   statement ends at the end of its line.  Empty lines, whitespace-only
+   lines and comment-only lines are ignored everywhere.
    =================================================================== *)
 
 (* ---------------------------- syntax ----------------------------- *)
 
-program     ::= { statement } ;
+(* Order is fixed: constants, then structures, then functions, then the
+   statements of the program.  A constant after a structure, a function
+   or a statement is a syntax error. *)
+program     ::= { global_decl } { struct } { fn } body
 
-statement   ::= declaration | assignment | if_stmt | while_stmt | exit_stmt ;
+(* A body is a sequence of statements.  Its LAST statement must be an
+   exit_stmt (a syntax error otherwise, reported at the closing "}" of a
+   function or at the end of the file).  An exit_stmt may also appear
+   earlier; statements after it are legal, they only produce the warning
+   "unreachable code".  The parser implements this rule as "parse
+   statements until "}" or end of file, then check the last one". *)
+body        ::= { other_stmt } exit_stmt { { other_stmt } exit_stmt }
 
-declaration ::= [ "відкрита" ] type identifier ":=" expression NL ;
+(* Global constants: always constant, built-in types only, initialised by a
+   constant expression.  Visible in the program body and in every function
+   and member function.  Variables declared in the program body are NOT
+   visible inside functions. *)
+global_decl ::= "факт" primitive_type identifier ":=" const_expression NL
+
+struct      ::= "struct" identifier NL
+                "{" NL field_decl { field_decl } { fn } "}" NL
+field_decl  ::= type [ "відкрита" ] identifier NL
+
+fn          ::= "fn" identifier ":=" "(" [ param { "," param } ] ")" "->" type NL
+                "{" NL body "}" NL
+param       ::= type identifier
+
+other_stmt  ::= declaration | assignment | if_stmt | while_stmt | print_stmt
+statement   ::= other_stmt | exit_stmt
+
+(* "{" and "}" of a block must each be alone on their own line; a block
+   contains at least one statement.  The "{" ... "}" of an init is written
+   inline and is not subject to this rule.  Blocks are used by if / while;
+   function bodies use "{" NL body "}" NL. *)
+block       ::= "{" NL statement { statement } "}" NL
+
+(* A statement that starts with "відкрита" or a built-in type name is a
+   declaration; one that starts with two identifiers in a row is a
+   declaration of a structure object; anything else is an expression that
+   must be followed by "=>".  A call alone is not a statement. *)
+declaration ::= [ "відкрита" ] type identifier ":=" value NL
 
 (* the value is written on the LEFT, the target on the RIGHT *)
-assignment  ::= expression "=>" identifier NL ;
+assignment  ::= expression "=>" target NL
+target      ::= identifier { "." identifier }
 
-(* "{" and "}" must each be alone on their own line;
-   "інакше" must start a new line and be alone on it *)
+(* "інакше" must start a new line and be alone on it *)
 if_stmt     ::= "якщо" "(" expression ")" NL block
-                [ "інакше" NL block ] ;
+                [ "інакше" NL block ]
 
-while_stmt  ::= "допоки" "(" expression ")" NL block ;
+while_stmt  ::= "допоки" "(" expression ")" NL block
 
-(* a block contains at least one statement *)
-block       ::= "{" NL statement { statement } "}" NL ;
+exit_stmt   ::= "чайна_перерва" factor NL
 
-exit_stmt   ::= "чайна_перерва" factor NL ;
+print_stmt  ::= "print" "(" ( string | expression ) ")" NL
 
-type        ::= "горнятко_32чл"      (* i32  *)
-              | "кухоль_64чл"        (* i64  *)
-              | "заповненість" ;     (* bool *)
+primitive_type ::= "горнятко_32чл"   (* i32  *)
+                 | "кухоль_64чл"     (* i64  *)
+                 | "заповненість"    (* bool *)
+type        ::= primitive_type
+              | identifier           (* a structure name *)
+
+init        ::= "{" value { "," value } "}"
+value       ::= expression | init
 
 (* comparison is NOT chainable: a == b == c is a syntax error *)
-expression  ::= arith [ ( "==" | "!=" ) arith ] ;
-
-arith       ::= term { ( "+" | "-" ) term } ;
-
-term        ::= factor { "*" factor } ;
+expression  ::= arith [ ( "==" | "!=" ) arith ]
+arith       ::= term { ( "+" | "-" ) term }
+term        ::= factor { "*" factor }
 
 (* there are no parentheses in expressions; "(" ")" appear only
-   around the condition of if / while *)
+   around the condition of if / while and in calls *)
 factor      ::= number
               | "повне"              (* true  *)
               | "пусте"              (* false *)
+              | "!" factor
+              | read_expr
+              | member_call          (* these four start with the same token: *)
+              | call                 (* parse the identifier, then look at    *)
+              | field                (* "." and "(" to decide                 *)
               | identifier
-              | "!" factor ;
+
+field       ::= identifier "." identifier { "." identifier }
+call        ::= identifier "(" args ")"
+member_call ::= identifier "." identifier { "." identifier } "(" args ")"
+args        ::= [ expression { "," expression } ]
+read_expr   ::= "read" "(" ")"
+
+(* Constant expressions: the same shape as expression, without read, calls,
+   fields and member calls.  An identifier here must name an EARLIER constant
+   (checked by the semantic pass, not by the grammar). *)
+const_expression ::= const_arith [ ( "==" | "!=" ) const_arith ]
+const_arith      ::= const_term { ( "+" | "-" ) const_term }
+const_term       ::= const_factor { "*" const_factor }
+const_factor     ::= number
+                   | "повне"
+                   | "пусте"
+                   | "!" const_factor
+                   | identifier
 
 (* ---------------------------- lexical ---------------------------- *)
 
-(* source files are UTF-8; a Cyrillic letter is two bytes *)
+(* Source files are UTF-8.  The lexer reads bytes; a Cyrillic letter is two
+   bytes, and columns in error messages count characters, not bytes.
+   Longest match wins: "=>" and "==" before "=", "->" before "-". *)
 
-number      ::= digit { digit } ;     (* decimal, no sign, no range check *)
+NL          ::= end of a line ("\n" or "\r\n"); a comment on the line comes first
+number      ::= digit { digit }      (* decimal, no sign *)
+string      ::= '"' { any byte except '"' and newline } '"'
+              (* no escape sequences; "#" inside is an ordinary character *)
+identifier  ::= ident_start { ident_char }   (* but not a keyword *)
+ident_start ::= letter | "_"
+ident_char  ::= letter | digit | "_"
+letter      ::= "a".."z" | "A".."Z" | cyrillic_letter
+digit       ::= "0".."9"
 
-identifier  ::= ident_start { ident_char } ;   (* but not a keyword *)
-ident_start ::= letter | "_" ;
-ident_char  ::= letter | digit | "_" ;
-letter      ::= "a".."z" | "A".."Z" | cyrillic_letter ;
-digit       ::= "0".."9" ;
+(* Ukrainian alphabet: U+0410..U+044F plus Ґ ґ Є є І і Ї ї
+   (U+0490, U+0491, U+0404, U+0454, U+0406, U+0456, U+0407, U+0457).
+   The range also admits Ъ Ы Э ъ ы э; the lexer accepts exactly this set. *)
+cyrillic_letter ::= "А".."Я" | "а".."я" | "Ґ" | "ґ" | "Є" | "є"
+                  | "І" | "і" | "Ї" | "ї"
 
 keyword     ::= "горнятко_32чл" | "кухоль_64чл" | "заповненість"
-              | "відкрита" | "повне" | "пусте"
-              | "якщо" | "інакше" | "допоки" | "чайна_перерва" ;
+              | "відкрита" | "факт" | "повне" | "пусте"
+              | "якщо" | "інакше" | "допоки" | "чайна_перерва"
+              | "struct" | "fn" | "print" | "read"
 
-operator    ::= ":=" | "=>" | "==" | "!=" | "+" | "-" | "*" | "!" ;
-paren       ::= "(" | ")" ;
-brace       ::= "{" | "}" ;
+operator    ::= ":=" | "=>" | "->" | "==" | "!=" | "+" | "-" | "*" | "!"
+punctuation ::= "." | ","
+paren       ::= "(" | ")"
+brace       ::= "{" | "}"
+
+(* A comment runs from "#" to the end of the line; the NL is NOT part of it.
+   It is discarded by the lexer, like whitespace, and may follow any token
+   or stand on a line of its own.  A "#" inside a string literal is an
+   ordinary character.  The text of a comment is never checked. *)
+comment     ::= "#" { any byte except newline }
 
 (* Whitespace (space, tab) separates tokens and is otherwise ignored.
-   Any other byte is a lexical error. *)
+   Any other byte outside a string or a comment is a lexical error. *)

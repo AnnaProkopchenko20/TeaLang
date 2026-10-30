@@ -1,0 +1,17 @@
+struct Inner
+{
+    горнятко_32чл відкрита val
+}
+struct Outer
+{
+    Inner відкрита inner
+    fn update := (горнятко_32чл nv) -> горнятко_32чл
+    {
+        nv => inner.val
+        чайна_перерва inner.val
+    }
+}
+відкрита Outer o := {{10}}
+print(o.update(99))
+print(o.inner.val)
+чайна_перерва 0

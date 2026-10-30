@@ -1,0 +1,26 @@
+Program
+  GlobalDecl C горнятко_32чл const
+    Const 10
+  Struct Point
+    Member x горнятко_32чл const
+    MemberFn get_x -> горнятко_32чл
+      Block
+        чайна_перерва
+          Var x
+  Fn add_c -> горнятко_32чл
+    Param v горнятко_32чл
+    Block
+      Decl res горнятко_32чл const
+        BinOp +
+          Var v
+          Var C
+      чайна_перерва
+        Var res
+  Decl p Point const
+    Const 5
+  Print
+    Call add_c
+      MemberCall get_x
+        Var p
+  чайна_перерва
+    Const 0

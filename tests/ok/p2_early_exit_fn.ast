@@ -1,0 +1,11 @@
+Program
+  Fn f -> горнятко_32чл
+    Block
+      чайна_перерва
+        Const 10
+      Decl dead горнятко_32чл const
+        Const 1
+      чайна_перерва
+        Const 0
+  чайна_перерва
+    Call f

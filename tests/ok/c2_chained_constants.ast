@@ -1,0 +1,13 @@
+Program
+  GlobalDecl a горнятко_32чл const
+    Const 5
+  GlobalDecl b горнятко_32чл const
+    BinOp +
+      Var a
+      Const 3
+  GlobalDecl c горнятко_32чл const
+    BinOp *
+      Var b
+      Const 2
+  чайна_перерва
+    Var c

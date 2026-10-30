@@ -1,3 +1,5 @@
 Program
   Decl кількість_чаю горнятко_32чл const
     Const 3
+  чайна_перерва
+    Const 0

@@ -1,0 +1,13 @@
+struct Point
+{
+    горнятко_32чл x
+    горнятко_32чл y
+}
+struct Line
+{
+    Point p1
+    Point p2
+}
+Line l := {{1, 2}, {3, 4}}
+print(l)
+чайна_перерва 0
