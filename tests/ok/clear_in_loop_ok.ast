@@ -1,0 +1,17 @@
+Program
+  для
+    Decl i горнятко_32чл відкрита
+      Const 0
+    BinOp !=
+      Var i
+      Const 2
+    Assign i
+      BinOp +
+        Var i
+        Const 1
+    Block
+      Clear
+      Print
+        Var i
+  чайна_перерва
+    Const 0

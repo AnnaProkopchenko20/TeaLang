@@ -1,0 +1,20 @@
+Program
+  Fn task -> горнятко_32чл
+    Param x горнятко_32чл
+    Block
+      Print
+        Var x
+      чайна_перерва
+        Var x
+  Thread t1
+  Thread t2
+  Spawn t1
+    Call task
+      Const 1
+  Spawn t2
+    Call task
+      Const 2
+  Join t1
+  Join t2
+  чайна_перерва
+    Const 0
