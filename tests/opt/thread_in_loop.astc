@@ -1,0 +1,26 @@
+Program
+  Fn вивести -> горнятко_32чл
+    Param x горнятко_32чл
+    Block
+      Print
+        Var x
+      чайна_перерва
+        Var x
+  для
+    Decl i горнятко_32чл відкрита
+      Const 1
+    BinOp !=
+      Var i
+      Const 4
+    Assign i
+      BinOp +
+        Var i
+        Const 1
+    Block
+      Thread t
+      Spawn t
+        Call вивести
+          Var i
+      Join t
+  чайна_перерва
+    Const 0

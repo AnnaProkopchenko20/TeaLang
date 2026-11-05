@@ -1,0 +1,5 @@
+print("a")
+clear()
+print("b")
+clear()
+чайна_перерва 0

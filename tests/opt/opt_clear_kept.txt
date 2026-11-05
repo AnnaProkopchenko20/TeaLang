@@ -1,0 +1,8 @@
+# clear() is an effect: the call may not be removed although its result is dead
+fn мить := () -> горнятко_32чл
+{
+    clear()
+    чайна_перерва 0
+}
+горнятко_32чл невикористана := мить()
+чайна_перерва 1

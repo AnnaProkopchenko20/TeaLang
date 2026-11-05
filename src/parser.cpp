@@ -635,6 +635,11 @@ unique_ptr<StmtNode> Parser::parse_statement()
     }
     if (at("keyword", kw::IF))    { return parse_if(); }
     if (at("keyword", kw::WHILE)) { return parse_while(); }
+    if (at("keyword", kw::FOR))    { return parse_for(); }
+    if (at("keyword", kw::THREAD)) { return parse_thread_decl(); }
+    if (at("keyword", kw::SPAWN))  { return parse_spawn(); }
+    if (at("keyword", kw::JOIN))   { return parse_join(); }
+    if (at("keyword", kw::CLEAR))  { return parse_clear(); }
 
     if (at("keyword", kw::ELSE))
     {
@@ -1002,4 +1007,85 @@ unique_ptr<ExprNode> Parser::parse_factor()
     }
 
     throw error("expected a number, 'повне', 'пусте', a variable or '!'");
+}
+
+// ------------------------------------------------------------ stage 3
+
+// for_stmt ::= "для" "(" [ decl_core ] ";" [ expression ] ";" [ assign_core ] ")" NL block
+unique_ptr<StmtNode> Parser::parse_for()
+{
+    Token k = eat();
+    expect("paren", "(", "'(' after '" + string(kw::FOR) + "'");
+
+    unique_ptr<DeclNode> init;
+    unique_ptr<ExprNode> cond;
+    unique_ptr<AsmtNode> step;
+
+    if (!at("semicolon", ";"))
+    {
+        bool decl_start = at("keyword", kw::MUT) || at_primitive_type()
+            || (at("identifier") && pos + 1 < toks.size() && toks[pos + 1].kind == "identifier");
+        if (!decl_start) { throw error("expected a declaration or ';' in the '" + string(kw::FOR) + "' header"); }
+        auto s = parse_decl();
+        init.reset(static_cast<DeclNode*>(s.release()));
+    }
+    expect("semicolon", ";", "';' after the initialisation");
+
+    if (!at("semicolon", ";")) { cond = parse_expr(); }
+    expect("semicolon", ";", "';' after the condition");
+
+    if (!at("paren", ")"))
+    {
+        auto s = parse_assign();
+        step.reset(static_cast<AsmtNode*>(s.release()));
+    }
+    expect("paren", ")", "')' after the step");
+    end_of_line();
+
+    auto body = parse_block(kw::FOR);
+    return make_unique<ForNode>(k.line, k.col, std::move(init), std::move(cond), std::move(step), std::move(body));
+}
+
+// thread_decl ::= "потік" identifier NL
+unique_ptr<StmtNode> Parser::parse_thread_decl()
+{
+    Token k = eat();
+    Token name = expect("identifier", "", "a thread handle name");
+    end_of_line();
+    return make_unique<ThreadDeclNode>(k.line, k.col, name.text);
+}
+
+// spawn_stmt ::= "витечи" call "=>" identifier NL
+unique_ptr<StmtNode> Parser::parse_spawn()
+{
+    Token k = eat();
+    Token fn = expect("identifier", "", "a function name after '" + string(kw::SPAWN) + "'");
+    expect("paren", "(", "'(' (a spawn needs a call)");
+    auto args = parse_args();
+    expect("paren", ")", "')'");
+    expect("operator", "=>", "'=>' and a thread handle after the call");
+    Token h = expect("identifier", "", "a thread handle name after '=>'");
+    end_of_line();
+    auto call = make_unique<FunctionCallNode>(fn.line, fn.col, fn.text, std::move(args));
+    return make_unique<SpawnNode>(k.line, k.col, std::move(call), h.text);
+}
+
+// join_stmt ::= "дочекатись" identifier NL
+unique_ptr<StmtNode> Parser::parse_join()
+{
+    Token k = eat();
+    Token h = expect("identifier", "", "a thread handle name");
+    end_of_line();
+    return make_unique<JoinNode>(k.line, k.col, h.text);
+}
+// ---- clear()
+
+// clear_stmt ::= "clear" "(" ")" NL
+unique_ptr<StmtNode> Parser::parse_clear()
+{
+    Token k = eat();
+    expect("paren", "(", "'(' after 'clear'");
+    expect("paren", ")", "')' ('clear' takes no arguments)");
+    end_of_line();
+    return make_unique<ClearNode>(k.line, k.col);
 }

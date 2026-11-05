@@ -187,6 +187,19 @@ llvm::Value* CodeGen::visit_program(ProgramNode& n)
         i32_type, {llvm::PointerType::getUnqual(context)}, true);
     scanf_func = module->getOrInsertFunction("scanf", sft);
 
+    {   // Stage 3: pthread + heap for the spawn argument block
+        llvm::PointerType* ptr_pt = llvm::PointerType::getUnqual(context);
+        llvm::Type* pt = ptr_pt;
+        pthread_create_func = module->getOrInsertFunction("pthread_create",
+            llvm::FunctionType::get(i32_type, {pt, pt, pt, pt}, false));
+        pthread_join_func = module->getOrInsertFunction("pthread_join",
+            llvm::FunctionType::get(i32_type, {i64_type, pt}, false));
+        malloc_func = module->getOrInsertFunction("malloc",
+            llvm::FunctionType::get(pt, {i64_type}, false));
+        free_func = module->getOrInsertFunction("free",
+            llvm::FunctionType::get(llvm::Type::getVoidTy(context), {pt}, false));
+    }
+
     // Step 4: Declare member functions
     for (auto& s : n.structs)
     {
@@ -666,5 +679,147 @@ llvm::Value* CodeGen::visit_init(InitNode& n)
 
 llvm::Value* CodeGen::visit_global_decl(GlobalDeclNode&)
 {
+    return nullptr;
+}
+
+// ------------------------------------------------------------ stage 3
+
+// for: init; cond:  body; step; back edge to cond. An empty cond is "always true".
+llvm::Value* CodeGen::visit_for(ForNode& n)
+{
+    llvm::Function* cur_f = builder.GetInsertBlock()->getParent();
+
+    if (n.init) n.init->accept(*this);
+
+    auto* cond_bb = llvm::BasicBlock::Create(context, "for.cond", cur_f);
+    auto* body_bb = llvm::BasicBlock::Create(context, "for.body", cur_f);
+    auto* step_bb = llvm::BasicBlock::Create(context, "for.step", cur_f);
+    auto* end_bb  = llvm::BasicBlock::Create(context, "for.end",  cur_f);
+
+    builder.CreateBr(cond_bb);
+    builder.SetInsertPoint(cond_bb);
+    if (n.cond)
+    {
+        llvm::Value* cond = n.cond->accept(*this);
+        builder.CreateCondBr(cond, body_bb, end_bb);
+    }
+    else
+    {
+        builder.CreateBr(body_bb);
+    }
+
+    builder.SetInsertPoint(body_bb);
+    n.body->accept(*this);
+    if (!current_block_terminated()) builder.CreateBr(step_bb);
+
+    builder.SetInsertPoint(step_bb);
+    if (n.step) n.step->accept(*this);
+    builder.CreateBr(cond_bb);
+
+    builder.SetInsertPoint(end_bb);
+    return nullptr;
+}
+
+// потік t : one i64 slot (a pthread_t), 0 = "no thread"
+llvm::Value* CodeGen::visit_thread_decl(ThreadDeclNode& n)
+{
+    llvm::AllocaInst* a = create_entry_alloca(i64_type, n.name);
+    allocas[n.handle.get()] = a;
+    builder.CreateStore(llvm::ConstantInt::get(i64_type, 0), a);
+    return nullptr;
+}
+
+// витечи f(a, b) => t
+// The arguments are evaluated here, in the spawning thread, and copied into a
+// malloc'ed block {T1, T2, ...}. A generated wrapper  ptr thread.N.f(ptr)  loads
+// them, frees the block, calls f and drops the result.
+llvm::Value* CodeGen::visit_spawn(SpawnNode& n)
+{
+    FunctionCallNode& c = *n.call;
+    FunctionDeclNode* fd = c.fn_decl;
+    llvm::Function* callee = ir_functions[c.name];
+    llvm::PointerType* ptr_pt = llvm::PointerType::getUnqual(context);
+    llvm::Type* ptr_t = ptr_pt;
+
+    std::vector<llvm::Type*> ftypes;
+    for (const auto& p : fd->params) ftypes.push_back(llvm_type(p->type_name));
+    llvm::StructType* st = ftypes.empty() ? nullptr : llvm::StructType::get(context, ftypes);
+
+    std::string wname = "thread." + std::to_string(thread_counter++) + "." + c.name;
+    llvm::FunctionType* wft = llvm::FunctionType::get(ptr_t, {ptr_t}, false);
+    llvm::Function* w = llvm::Function::Create(wft, llvm::Function::InternalLinkage, wname, module.get());
+    {
+        llvm::IRBuilderBase::InsertPointGuard guard(builder);
+        auto* eb = llvm::BasicBlock::Create(context, "entry", w);
+        builder.SetInsertPoint(eb);
+        llvm::Value* block = w->getArg(0);
+        std::vector<llvm::Value*> cargs;
+        for (size_t i = 0; i < ftypes.size(); ++i)
+        {
+            llvm::Value* gep = builder.CreateStructGEP(st, block, (unsigned)i);
+            cargs.push_back(builder.CreateLoad(ftypes[i], gep));
+        }
+        builder.CreateCall(callee, cargs);
+        if (st)
+        {
+            std::vector<llvm::Value*> fargs{block};
+            builder.CreateCall(free_func, fargs);
+        }
+        builder.CreateRet(llvm::ConstantPointerNull::get(ptr_pt));
+    }
+
+    llvm::Value* argp = llvm::ConstantPointerNull::get(ptr_pt);
+    if (st)
+    {
+        llvm::Value* one = llvm::ConstantInt::get(i32_type, 1);
+        std::vector<llvm::Value*> idx{one};
+        llvm::Value* endp = builder.CreateGEP(st, llvm::ConstantPointerNull::get(ptr_pt), idx);
+        llvm::Value* size = builder.CreatePtrToInt(endp, i64_type);
+        std::vector<llvm::Value*> margs{size};
+        argp = builder.CreateCall(malloc_func, margs);
+        for (size_t i = 0; i < c.args.size(); ++i)
+        {
+            llvm::Value* v = c.args[i]->accept(*this);
+            v = coerce(v, c.args[i]->type, fd->params[i]->type_name);
+            llvm::Value* gep = builder.CreateStructGEP(st, argp, (unsigned)i);
+            builder.CreateStore(v, gep);
+        }
+    }
+
+    std::vector<llvm::Value*> targs{allocas[n.handle],
+                                    llvm::ConstantPointerNull::get(ptr_pt), w, argp};
+    builder.CreateCall(pthread_create_func, targs);
+    return nullptr;
+}
+
+// дочекатись t : if the slot holds a thread, join it and clear the slot
+llvm::Value* CodeGen::visit_join(JoinNode& n)
+{
+    llvm::Function* cur_f = builder.GetInsertBlock()->getParent();
+    llvm::AllocaInst* slot = allocas[n.handle];
+    llvm::Value* tid = builder.CreateLoad(i64_type, slot, "tid");
+    llvm::Value* live = builder.CreateICmpNE(tid, llvm::ConstantInt::get(i64_type, 0), "tid_live");
+
+    auto* wait_bb = llvm::BasicBlock::Create(context, "join.wait", cur_f);
+    auto* done_bb = llvm::BasicBlock::Create(context, "join.done", cur_f);
+    builder.CreateCondBr(live, wait_bb, done_bb);
+
+    builder.SetInsertPoint(wait_bb);
+    std::vector<llvm::Value*> jargs{tid, llvm::ConstantPointerNull::get(llvm::PointerType::getUnqual(context))};
+    builder.CreateCall(pthread_join_func, jargs);
+    builder.CreateStore(llvm::ConstantInt::get(i64_type, 0), slot);
+    builder.CreateBr(done_bb);
+
+    builder.SetInsertPoint(done_bb);
+    return nullptr;
+}
+// ---- clear()
+
+// clear(): ANSI "erase screen" + "cursor to home". The text has no newline, so it
+// reaches the terminal together with the next line that is printed.
+llvm::Value* CodeGen::visit_clear(ClearNode&)
+{
+    llvm::Value* seq = builder.CreateGlobalStringPtr("\x1b[2J\x1b[H", "clear_seq");
+    builder.CreateCall(printf_func, {seq});
     return nullptr;
 }

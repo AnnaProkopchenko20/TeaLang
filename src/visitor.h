@@ -29,4 +29,11 @@ struct Visitor {
     virtual llvm::Value* visit_print(PrintNode&) = 0;
     virtual llvm::Value* visit_read(ReadNode&) = 0;
     virtual llvm::Value* visit_global_decl(GlobalDeclNode&) = 0;
+
+    // Stage 3
+    virtual llvm::Value* visit_for(ForNode&) = 0;
+    virtual llvm::Value* visit_thread_decl(ThreadDeclNode&) = 0;
+    virtual llvm::Value* visit_spawn(SpawnNode&) = 0;
+    virtual llvm::Value* visit_join(JoinNode&) = 0;
+    virtual llvm::Value* visit_clear(ClearNode&) = 0;
 };

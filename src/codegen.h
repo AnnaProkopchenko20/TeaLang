@@ -43,6 +43,18 @@ struct CodeGen : Visitor
     StructDeclNode*                           current_struct    = nullptr;
     llvm::Value*                              current_this_ptr  = nullptr;
 
+    llvm::FunctionCallee pthread_create_func;
+    llvm::FunctionCallee pthread_join_func;
+    llvm::FunctionCallee malloc_func;
+    llvm::FunctionCallee free_func;
+    int                  thread_counter = 0;
+
+    llvm::Value* visit_for(ForNode& n)               override;
+    llvm::Value* visit_thread_decl(ThreadDeclNode& n) override;
+    llvm::Value* visit_spawn(SpawnNode& n)            override;
+    llvm::Value* visit_clear(ClearNode& n)             override;
+    llvm::Value* visit_join(JoinNode& n)              override;
+
     CodeGen();
 
     llvm::Value* visit_program(ProgramNode& n) override;

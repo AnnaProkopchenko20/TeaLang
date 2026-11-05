@@ -13,6 +13,7 @@
 
 #include "codegen.h"
 #include "lexer.h"
+#include "optimizer/pipeline.h"
 #include "parser.h"
 #include "semantic_checker.h"
 
@@ -24,6 +25,8 @@ namespace
     {
         bool print_ast = false;
         bool print_tokens = false;
+        bool optimize = false;
+        bool opt_stats = false;
         std::string input_path;
         std::string output_path;
     };
@@ -43,6 +46,12 @@ namespace
             }
             else if (arg == "-tokens" || arg == "--tokens") {
                 opts.print_tokens = true;
+            }
+            else if (arg == "-optimize" || arg == "--optimize") {
+                opts.optimize = true;
+            }
+            else if (arg == "--opt-stats") {
+                opts.opt_stats = true;
             }
             else {
                 files.push_back(arg);
@@ -112,8 +121,8 @@ namespace
 
         auto program = parse(lines);
 
-        // Stage 1 output requirement
-        if (opts.print_ast)
+        // Plain --ast: the parse tree, before the checker (unchanged behaviour).
+        if (opts.print_ast && !opts.optimize)
         {
             program->dump(0);
             return 0;
@@ -122,10 +131,31 @@ namespace
         SemanticChecker checker;
         program->accept(checker);
 
-        // WP6: Print warnings after successful semantic pass only
+        // Print warnings after successful semantic pass only
         for (const auto& w : checker.warnings)
         {
             std::cerr << w << "\n";
+        }
+
+        if (opts.optimize)
+        {
+            OptStats st = optimize(*program);
+            if (opts.opt_stats)
+            {
+                std::cerr << "optimize: rounds=" << st.rounds
+                          << " unreachable=" << st.unreachable
+                          << " constants=" << st.constants
+                          << " variables=" << st.variables
+                          << " functions=" << st.functions
+                          << " inlined=" << st.inlined << "\n";
+            }
+        }
+
+        // --optimize --ast: the checked and optimized tree
+        if (opts.print_ast)
+        {
+            program->dump(0);
+            return 0;
         }
 
         CodeGen cg;

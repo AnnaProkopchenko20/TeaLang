@@ -848,6 +848,8 @@ llvm::Value* SemanticChecker::visit_var(VarNameNode& n)
         fail(n, "internal: VarNameNode for field should have been rewritten");
 
     n.decl = res.decl;
+    if (res.decl->type_name == kw::THREAD)
+        fail(n, "a thread handle '" + n.name + "' can only be the target of a spawn or the argument of a wait");
     n.type = res.decl->type_name;
     return nullptr;
 }
@@ -1046,4 +1048,78 @@ llvm::Value* SemanticChecker::visit_init(InitNode& n)
 llvm::Value* SemanticChecker::visit_global_decl(GlobalDeclNode&)
 {
     return nullptr;
+}
+
+// ------------------------------------------------------------ stage 3
+
+llvm::Value* SemanticChecker::visit_for(ForNode& n)
+{
+    scopes.emplace_back();          // the loop variable lives only inside the statement
+    if (n.init) n.init->accept(*this);
+    if (n.cond) check_condition(n.cond, n, kw::FOR);
+    if (n.step) n.step->accept(*this);
+    n.body->accept(*this);
+    scopes.pop_back();
+    return nullptr;
+}
+
+llvm::Value* SemanticChecker::visit_thread_decl(ThreadDeclNode& n)
+{
+    check_decl_name(n, n.name);
+    if (scopes.back().count(n.name))
+        fail(n, "variable '" + n.name + "' is already declared in this block");
+    scopes.back()[n.name] = n.handle.get();
+    return nullptr;
+}
+
+llvm::Value* SemanticChecker::visit_spawn(SpawnNode& n)
+{
+    FunctionCallNode& c = *n.call;
+
+    // a spawn always starts a GLOBAL function
+    auto it = functions.find(c.name);
+    if (it == functions.end())
+        fail(c, "function '" + c.name + "' is not declared");
+    FunctionDeclNode* f = it->second;
+    c.fn_decl = f;
+
+    if (c.args.size() != f->params.size())
+        fail(c, "'" + c.name + "' takes " + std::to_string(f->params.size()) +
+                " argument(s), got " + std::to_string(c.args.size()));
+
+    for (size_t i = 0; i < c.args.size(); ++i)
+    {
+        check_expr(c.args[i]);
+        const auto& want = f->params[i]->type_name;
+        const auto& have = c.args[i]->type;
+        if (canonical_type(have) != canonical_type(want) && !(is_i32(have) && is_i64(want)))
+            fail(*c.args[i], "cannot pass argument " + std::to_string(i + 1) + " of '" +
+                 c.name + "' of type " + want + " with a value of type " + have);
+    }
+    c.type = f->return_type;
+
+    auto res = lookup_name(n.handle_name);
+    if (res.kind == LookupResult::NotFound)
+        fail(n, "variable '" + n.handle_name + "' is used before its declaration");
+    if (res.kind != LookupResult::LocalVar || res.decl->type_name != kw::THREAD)
+        fail(n, "'" + n.handle_name + "' is not a thread handle");
+    n.handle = res.decl;
+    return nullptr;
+}
+
+llvm::Value* SemanticChecker::visit_join(JoinNode& n)
+{
+    auto res = lookup_name(n.handle_name);
+    if (res.kind == LookupResult::NotFound)
+        fail(n, "variable '" + n.handle_name + "' is used before its declaration");
+    if (res.kind != LookupResult::LocalVar || res.decl->type_name != kw::THREAD)
+        fail(n, "'" + n.handle_name + "' is not a thread handle");
+    n.handle = res.decl;
+    return nullptr;
+}
+// ---- clear()
+
+llvm::Value* SemanticChecker::visit_clear(ClearNode&)
+{
+    return nullptr;     // nothing to check
 }

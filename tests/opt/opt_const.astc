@@ -1,0 +1,9 @@
+Program
+  Decl x горнятко_32чл const
+    BinOp +
+      Const 20
+      Const 1
+  Print
+    Var x
+  чайна_перерва
+    Var x

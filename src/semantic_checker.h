@@ -50,6 +50,12 @@ public:
     llvm::Value* visit_init(InitNode& n)                    override;
     llvm::Value* visit_global_decl(GlobalDeclNode& n)       override;
 
+    llvm::Value* visit_for(ForNode& n)               override;
+    llvm::Value* visit_thread_decl(ThreadDeclNode& n) override;
+    llvm::Value* visit_spawn(SpawnNode& n)            override;
+    llvm::Value* visit_clear(ClearNode& n)             override;
+    llvm::Value* visit_join(JoinNode& n)              override;
+
     std::map<std::string, StructInfo> structs;
     std::map<std::string, GlobalDeclNode*> global_constants;
     std::vector<std::string> warnings;

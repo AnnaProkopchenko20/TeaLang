@@ -66,6 +66,11 @@ private:
     std::unique_ptr<StmtNode> parse_exit();
     std::unique_ptr<IfNode> parse_if();
     std::unique_ptr<WhileNode> parse_while();
+    std::unique_ptr<StmtNode> parse_for();
+    std::unique_ptr<StmtNode> parse_thread_decl();
+    std::unique_ptr<StmtNode> parse_spawn();
+    std::unique_ptr<StmtNode> parse_join();
+    std::unique_ptr<StmtNode> parse_clear();
     std::unique_ptr<GlobalDeclNode> parse_global_decl();
     std::unique_ptr<ExprNode> parse_const_expression();
     std::unique_ptr<ExprNode> parse_const_arith();

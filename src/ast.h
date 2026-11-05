@@ -35,4 +35,7 @@
 #include "nodes/print_node.h"
 #include "nodes/read_node.h"
 #include "nodes/this_node.h"
+#include "nodes/for_node.h"
+#include "nodes/thread_nodes.h"
+#include "nodes/clear_node.h"
 #include "nodes/program_node.h"

@@ -27,3 +27,9 @@ struct ReadNode;
 struct ThisNode;
 struct GlobalDeclNode;
 
+// Stage 3
+struct ForNode;
+struct ThreadDeclNode;
+struct SpawnNode;
+struct JoinNode;
+struct ClearNode;

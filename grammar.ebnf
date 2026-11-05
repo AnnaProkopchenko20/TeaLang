@@ -1,5 +1,5 @@
 (* ===================================================================
-   Grammar of the "tea" language (Ukrainian keywords), stages 1-2.
+   Grammar of the "tea" language (Ukrainian keywords), stages 1-3.
    Notation: EBNF with "::=".  { x } = zero or more, [ x ] = optional,
    a | b = alternative, ( ... ) = grouping, "text" = literal terminal,
    "a".."z" = a range of characters.
@@ -37,23 +37,26 @@ fn          ::= "fn" identifier ":=" "(" [ param { "," param } ] ")" "->" type N
                 "{" NL body "}" NL
 param       ::= type identifier
 
-other_stmt  ::= declaration | assignment | if_stmt | while_stmt | print_stmt
+other_stmt  ::= declaration | assignment | if_stmt | while_stmt | for_stmt
+              | thread_decl | spawn_stmt | join_stmt | clear_stmt | print_stmt
 statement   ::= other_stmt | exit_stmt
 
 (* "{" and "}" of a block must each be alone on their own line; a block
    contains at least one statement.  The "{" ... "}" of an init is written
-   inline and is not subject to this rule.  Blocks are used by if / while;
-   function bodies use "{" NL body "}" NL. *)
+   inline and is not subject to this rule.  Blocks are used by if / while /
+   for; function bodies use "{" NL body "}" NL. *)
 block       ::= "{" NL statement { statement } "}" NL
 
 (* A statement that starts with "відкрита" or a built-in type name is a
    declaration; one that starts with two identifiers in a row is a
    declaration of a structure object; anything else is an expression that
    must be followed by "=>".  A call alone is not a statement. *)
-declaration ::= [ "відкрита" ] type identifier ":=" value NL
+declaration ::= decl_core NL
+decl_core   ::= [ "відкрита" ] type identifier ":=" value
 
 (* the value is written on the LEFT, the target on the RIGHT *)
-assignment  ::= expression "=>" target NL
+assignment  ::= assign_core NL
+assign_core ::= expression "=>" target
 target      ::= identifier { "." identifier }
 
 (* "інакше" must start a new line and be alone on it *)
@@ -62,9 +65,38 @@ if_stmt     ::= "якщо" "(" expression ")" NL block
 
 while_stmt  ::= "допоки" "(" expression ")" NL block
 
+(* Counting loop.  The three parts are separated by ";" and each of them
+   may be left out: an empty condition means "повне" (the loop runs until
+   it is left by an exit_stmt), an empty init or step does nothing.
+   A variable declared in for_init is visible only in the condition, the
+   step and the body of its own loop; it must be "відкрита" if the step or
+   the body assigns it.  The body is a block, as for "допоки".
+   for_init and for_step are a declaration and an assignment WITHOUT the
+   NL at the end. *)
+for_stmt    ::= "для" "(" [ for_init ] ";" [ expression ] ";" [ for_step ] ")" NL block
+for_init    ::= decl_core
+for_step    ::= assign_core
+
+(* Threads.  A thread handle is a variable of the type "потік".  It is
+   declared without a value and holds "no thread" until a spawn stores one
+   in it.  "витечи" starts the called global function on a new thread; the
+   arguments are evaluated first, in the spawning thread, and copied; the
+   result of the function is discarded.  "дочекатись" waits until the
+   thread of the handle has finished; a handle that holds no thread (never
+   spawned, or already waited for) makes it do nothing.  A handle may be
+   used only as the target of a spawn and as the argument of a wait: it
+   cannot be copied, passed, returned, stored in a field or printed, and
+   "потік" is therefore not part of "type". *)
+thread_decl ::= "потік" identifier NL
+spawn_stmt  ::= "витечи" call "=>" identifier NL
+join_stmt   ::= "дочекатись" identifier NL
+
 exit_stmt   ::= "чайна_перерва" factor NL
 
 print_stmt  ::= "print" "(" ( string | expression ) ")" NL
+
+(* Clears the console (ANSI: erase screen, cursor to the top-left corner). *)
+clear_stmt  ::= "clear" "(" ")" NL
 
 primitive_type ::= "горнятко_32чл"   (* i32  *)
                  | "кухоль_64чл"     (* i64  *)
@@ -134,11 +166,12 @@ cyrillic_letter ::= "А".."Я" | "а".."я" | "Ґ" | "ґ" | "Є" | "є"
 
 keyword     ::= "горнятко_32чл" | "кухоль_64чл" | "заповненість"
               | "відкрита" | "факт" | "повне" | "пусте"
-              | "якщо" | "інакше" | "допоки" | "чайна_перерва"
+              | "якщо" | "інакше" | "допоки" | "для" | "чайна_перерва"
+              | "потік" | "витечи" | "дочекатись" | "clear"
               | "struct" | "fn" | "print" | "read"
 
 operator    ::= ":=" | "=>" | "->" | "==" | "!=" | "+" | "-" | "*" | "!"
-punctuation ::= "." | ","
+punctuation ::= "." | "," | ";"
 paren       ::= "(" | ")"
 brace       ::= "{" | "}"
 
