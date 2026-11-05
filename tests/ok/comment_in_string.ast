@@ -1,0 +1,4 @@
+Program
+  Print "# not a comment"
+  чайна_перерва
+    Const 0

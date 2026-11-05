@@ -1,0 +1,14 @@
+Program
+  GlobalDecl b1 заповненість const
+    Not !
+      Bool пусте
+  GlobalDecl b2 заповненість const
+    BinOp ==
+      Const 1
+      Const 1
+  GlobalDecl b3 заповненість const
+    BinOp !=
+      Const 2
+      Const 3
+  чайна_перерва
+    Const 0

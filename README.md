@@ -1,271 +1,207 @@
-# Tea language compiler: Stage 1 (lexer and parser)
+# Tea language compiler: Stage 3 (Threads Feature, AST Optimizer & Native Program)
 
-A small statically-typed language with Ukrainian keywords and a tea theme.
-Stage 1 contains a hand-written, byte-level, state-machine lexer and a
-hand-written recursive-descent parser that builds an AST and dumps it as an
-indented tree. No regular expressions, `split()`, lexer generators or parser
-generators are used.
+A statically-typed programming language featuring Ukrainian keywords, a tea-inspired domain design, an AST optimizer, native code generation using LLVM IR (`llvm::IRBuilder`), and POSIX multi-threading support.
 
-Related files: [`grammar.ebnf`](grammar.ebnf) (full grammar),
-[`ai_usage.txt`](ai_usage.txt) (AI disclosure), `tests/` (test suite),
-`run.sh` (test runner).
+## Language Overview & Syntax Reference
 
----
-
-## Language at a glance
-
-| Concept | Keyword / symbol | Meaning |
-|---|---|---|
-| 32-bit integer | `горнятко_32чл` | `i32` |
-| 64-bit integer | `кухоль_64чл` | `i64` |
-| boolean | `заповненість` | `bool` |
-| mutable marker | `відкрита` | variable may be reassigned |
-| true / false | `повне` / `пусте` | boolean literals |
-| if / else | `якщо` / `інакше` | conditional |
-| loop | `допоки` | `while` loop |
-| exit | `чайна_перерва` | stop the program with a value |
-| declaration | `:=` | `type name := value` |
-| assignment | `=>` | `value => name` (value on the left) |
-| comparison | `==`, `!=` | equality, inequality |
-| arithmetic | `+`, `-`, `*` | integer arithmetic |
-| negation | `!` | boolean not |
-
-Source files are UTF-8. Identifiers may contain Latin and Cyrillic letters,
-digits and `_` (for example `кількість_чаю`).
-
-### Unusual syntax features
-
-* **Reversed assignment.** The value comes first, the target last:
-  `x + 1 => x`.
-* **Line-oriented layout.** Every statement ends at the end of its line.
-  There is no `;`.
-* **Braces on their own line.** `{` and `}` must each be alone on a line,
-  and so must `інакше`. `якщо (c) {` on one line is a syntax error.
-* **Cyrillic multi-byte keywords.** Keywords are UTF-8 byte sequences
-  recognised by the same state machine as ASCII words. Columns in error
-  messages count characters, not bytes.
-
-### 1. Integer types
-
-```text
-горнятко_32чл small := 42
-кухоль_64чл big := 9000000000
-```
-
-### 2. Boolean type
-
-```text
-заповненість ready := повне
-заповненість empty := пусте
-```
-
-### 3. Constants and variables
-
-There are two kinds of binding:
-
-* `type name := value` is **immutable**. It is a constant: it cannot be
-  reassigned. Immutable bindings are the language's only way to declare a
-  constant, so "constants" and "constant variables" are the same construct.
-* `відкрита type name := value` is **mutable**.
-
-```text
-горнятко_32чл limit := 100
-відкрита горнятко_32чл counter := 0
-```
-
-The AST dump shows the flag as `const` or `відкрита`.
-
-### 4. Assignment
-
-```text
-counter + 1 => counter
-```
-
-### 5. Comparison and operators
-
-`==` and `!=` produce a `bool`. They are not chainable (`a == b == c` is a
-syntax error). Precedence from loosest to tightest:
-`==` `!=`, then `+` `-`, then `*`, then prefix `!`. `+ - *` are left
-associative. Expressions have no parentheses; `(` `)` appear only around the
-condition of `якщо` and `допоки`.
-
-```text
-заповненість same := 1 + 2 == 3
-заповненість flipped := !повне
-```
-
-### 6. Conditional (`якщо` / `інакше`)
-
-The `інакше` part is optional. Each block must contain at least one
-statement.
-
-```text
-якщо (counter == 100)
-{
-    чайна_перерва 1
-}
-інакше
-{
-    counter + 1 => counter
-}
-```
-
-### 7. Loop (`допоки`)
-
-```text
-відкрита горнятко_32чл i := 0
-допоки (i != 3)
-{
-    i + 1 => i
-}
-```
-
-### 8. Exit
-
-`чайна_перерва` takes a single factor (number, boolean, variable, or `!` of
-one):
-
-```text
-чайна_перерва 0
-```
-
-### Complete example
-
-```text
-відкрита горнятко_32чл лічильник := 10
-заповненість є_готовим := повне
-якщо (лічильник == 10)
-{
-    лічильник + 1 => лічильник
-}
-чайна_перерва 0
-```
+| Concept | Keyword / Symbol | Meaning / Description |
+| --- | --- | --- |
+| 32-bit Integer | `горнятко_32чл` | `i32` standard signed integer |
+| 64-bit Integer | `кухоль_64чл` | `i64` wide signed integer |
+| Boolean | `заповненість` | `bool` logical type |
+| Thread Handle | `потік` | Thread reference type for concurrency |
+| Mutable Marker | `відкрита` | Specifies variable or field mutability |
+| Global Constant | `факт` | Compile-time global constant |
+| True / False | `повне` / `пусте` | Boolean literals |
+| Conditional | `якщо` / `інакше` | `if` / `else` conditional branch |
+| While Loop | `допоки` | Condition-driven loop |
+| For Loop | `для` | Range/counting loop (`для (init; cond; step)`) |
+| Thread Spawn | `витечи` | Spawns a global function on a new pthread |
+| Thread Join | `дочекатись` | Synchronizes and waits for thread completion |
+| Screen Clear | `clear()` | Erases terminal buffer (ANSI sequence) |
+| Program Exit | `чайна_перерва` | Returns from function or exits program with status |
+| Declaration | `:=` | `type name := value` |
+| Assignment | `=>` | Reversed assignment: `value => target` |
+| Structure | `struct` | Composite user-defined type with methods |
+| Functions | `fn`, `->` | `fn name := (params) -> type` |
+| Member Access | `.` | Accesses struct fields and methods (`obj.field`, `obj.method()`) |
+| I/O Built-ins | `read()`, `print(...)` | Console input and output |
+| Comments | `#` | Inline comment to end of line |
 
 ---
 
-## Scope of Stage 1 and what is deliberately deferred
+## Detailed Documentation of All Added Features
 
-Stage 1 is **syntax only**. Everything below is a *semantic* property and is
-therefore planned for Stage 2, not checked here:
+### 1. Threads (`потік`, `витечи`, `дочекатись`)
+* **Syntax & Keyword Definitions:**
+  * `потік handle_name` declares a dedicated thread handle variable. Thread handles cannot be copied, assigned directly, stored in struct fields, or passed as standard function arguments.
+  * `витечи fn_name(args) => handle_name` spawns a global function in a background POSIX thread (`pthread_create`). Arguments are evaluated first in the spawner thread and allocated into a heap payload buffer.
+  * `дочекатись handle_name` synchronizes execution by calling `pthread_join` on the handle, blocking until the worker finishes, and freeing allocated heap memory.
+* **Error Rules:**
+  * Spawning non-functions or passing incorrect argument counts/types triggers a compile-time error.
+  * Attempting `дочекатись` on a non-thread handle or using `потік` variables in arithmetic yields a semantic error.
+* **Concurrency Data Race Policy:**
+  * If two or more threads concurrently write to the same shared variable without external synchronization primitives, a data race occurs, resulting in undefined behavior.
 
-| Requirement | Status in Stage 1 |
-|---|---|
-| Type overflow checks | **Not checked.** Numbers are parsed as digit strings with no range limit, so `горнятко_32чл x := 2147483648` parses successfully. Range checking against `i32` / `i64` (and checks on arithmetic results) belongs to the semantic stage, where the declared type is known. The tests `overflow_i32_literal_parses` and `overflow_i64_literal_parses` record this behaviour on purpose. |
-| Assigning to an immutable binding | Not checked (parses fine). Stage 2. |
-| Use of undeclared / redeclared variables | Not checked. Stage 2. |
-| Type checking (for example `заповненість x := 1 + 2`, or `!` on an integer) | Not checked. Stage 2. |
+### 2. For Loops (`для`)
+* **Syntax:** `для ([for_init] ; [expression] ; [for_step]) NL block`
+  * `for_init`: Variable declaration (`decl_core`), e.g., `відкрита горнятко_32чл i := 0`.
+  * `expression`: Loop condition, evaluated before each iteration. Omitted condition defaults to `повне` (infinite loop).
+  * `for_step`: Variable assignment (`assign_core`), e.g., `i + 1 => i`.
+* **Lowering & IR Generation:**
+  * Lowered into basic blocks: `for.cond`, `for.body`, `for.step`, `for.end` with explicit conditional branches and back-edges.
+* **Scope Rules:**
+  * Variables declared in `for_init` are scoped strictly to the loop (condition, step, and body block).
 
-What **is** checked in Stage 1: all lexical errors (unknown byte) and all
-syntax errors described by `grammar.ebnf`, such as unclosed or empty blocks,
-missing `(`/`)`/`{`/`:=`/`=>`, stray `інакше` or `}`, missing operands, and
-tokens left over at the end of a statement.
-
-Also not in the language: unary minus (no negative literals), parenthesised
-sub-expressions, comparison operators other than `==` / `!=`, comments, and
-string or floating-point literals.
+### 3. Screen Clear (`clear()`)
+* **Syntax:** `clear() NL`
+* **Semantics:** Emits ANSI escape sequence `\033[2J\033[H` to stdout, clearing the terminal buffer and resetting cursor position to top-left.
+* **Error Rules:** Cannot take arguments (`clear(x)` is invalid) and cannot be embedded in expressions (`x + clear()`).
 
 ---
 
-## Requirements
-
-* C++17 compiler (GCC or Clang)
-* CMake 3.20+
-* LLVM development headers and libraries. `visitor.h` includes
-  `<llvm/IR/Value.h>`, because the AST visitor interface is shared with the
-  code-generation stage. Stage 1 itself does not generate any code.
-* A UTF-8 terminal and UTF-8 source files
-
-## Build
+## Compiler Usage & CLI Flags
 
 ```bash
-mkdir -p build
-cd build
-cmake ..
-cmake --build . --target compiler
+# Build the compiler executable
+mkdir -p build && cd build
+cmake .. && cmake --build . --target compiler
 cd ..
+
+# 1. Compile source to LLVM IR
+./build/compiler programs/teacup.txt build/teacup.ll
+
+# 2. Print initial AST
+./build/compiler --ast programs/teacup.txt
+
+# 3. Compile with AST Optimizations
+./build/compiler --optimize programs/teacup.txt build/teacup.ll
+
+# 4. Print AST after optimization passes
+./build/compiler --optimize --ast programs/teacup.txt
 ```
 
-This produces `build/compiler`.
-
-## Run
+### Native Binary Compilation (llc + clang)
 
 ```bash
-./build/compiler -ast path/to/program.txt
+# Compile LLVM IR to Position-Independent Object Code
+llc -relocation-model=pic -filetype=obj build/teacup.ll -o build/teacup.o
+
+# Link into native binary executable with POSIX threads
+clang build/teacup.o -pthread -o build/teacup
+
+# Run interactive native executable
+./build/teacup < programs/teacup.in
 ```
 
-(`--ast` is accepted as well. `-tokens` / `--tokens` prints the token stream
-instead and is meant for debugging.)
+---
 
-* **Success:** the AST is printed to `stdout`, indented two spaces per depth,
-  exit code 0.
-* **Error:** nothing on `stdout`, exactly one line on `stderr`, exit code 1:
+## Feature Example Programs
 
-```text
-compilation error: line L:C: message
+### 1. Thread Example (`tests/ok/thread_basic_spawn_join.txt`)
+```tea
+fn worker := (горнятко_32чл id) -> горнятко_32чл
+{
+    print(id)
+    чайна_перерва id
+}
+
+потік t1
+витечи worker(100) => t1
+дочекатись t1
+чайна_перерва 0
 ```
 
-Only the first error is reported. `L` is the line and `C` the column, both
-starting at 1, with columns counted in characters.
-
-### AST dump format
-
-```text
-Program
-  Decl лічильник горнятко_32чл відкрита      Decl <name> <type> <відкрита|const>
-    Const 10                                 number literal
-  якщо                                       if: children are condition, Block,
-    BinOp ==                                   then optionally "інакше" + Block
-      Var лічильник
-      Const 10
-    Block
-      Assign лічильник                       Assign <target>; child is the value
-        BinOp +
-          Var лічильник
-          Const 1
-  чайна_перерва
-    Not !                                    negation
-      Bool пусте                             Bool повне | пусте
+### 2. Range Loop Example (`tests/ok/for_simple.txt`)
+```tea
+відкрита горнятко_32чл sum := 0
+для (відкрита горнятко_32чл i := 0; i != 5; i + 1 => i)
+{
+    sum + i => sum
+}
+print(sum)
+чайна_перерва 0
 ```
 
-Other nodes: `допоки` (children: condition, `Block`). `інакше` appears as a
-child of `якщо` and holds the else `Block`.
-
-## Tests
-
-```text
-tests/ok/    valid programs:    name.txt  +  name.ast   (expected stdout)
-tests/err/   invalid programs:  name.txt  +  name.err   (expected stderr line)
+### 3. Screen Clear Example (`tests/ok/clear_statement.txt`)
+```tea
+clear()
+print("Screen cleared")
+чайна_перерва 0
 ```
 
-* 28 happy-path tests and 27 error tests (each feature is covered by a program
-  that uses it and one that misuses it, where misuse is a syntactic error).
-* The runner builds the compiler, runs every test and prints a diff for each
-  failure. For error tests it also checks that the exit code is non-zero and
-  that nothing is printed to `stdout`.
+---
+
+## Task 1 IR Excerpt & Explanation (Threads Argument Packing)
+```llvm
+%0 = call ptr @malloc(i64 8)
+store i32 42, ptr %0, align 4
+%1 = getelementptr i8, ptr %0, i64 4
+store i32 100, ptr %1, align 4
+%2 = call i32 @pthread_create(ptr %t1, ptr null, ptr @worker_thread_wrapper, ptr %0)
+%3 = load i64, ptr %t1, align 8
+%4 = call i32 @pthread_join(i64 %3, ptr null)
+ret i32 0
+```
+* **Lines 1–4 (`malloc` & `store`):** Heap-allocates a payload structure to pack function arguments together safely across thread boundaries.
+* **Line 5 (`pthread_create`):** Invokes POSIX thread creation, passing the target function wrapper and the packed heap argument structure.
+* **Lines 6–7 (`pthread_join`):** Retrieves the raw 64-bit thread handle and blocks execution until the target worker thread finishes.
+
+---
+
+## Task 2: The AST Optimizer
+
+When passed `--optimize`, the compiler executes three AST-level transformations before IR generation:
+1. **Unused Variables Removal (`var_remover`):** Removes unused declarations and non-side-effect assignments.
+2. **Unused Functions Removal (`fn_remover`):** Prunes unreferenced top-level functions.
+3. **Function Inlining (`inliner`):** Replaces single-call non-recursive functions directly at call sites.
+
+### Inlining IR Excerpt (Before vs. After)
+
+**Before Optimization**
+```llvm
+define i32 @compute(i32 %x) {
+entry:
+  %add = add i32 %x, 5
+  ret i32 %add
+}
+
+define i32 @main() {
+entry:
+  %call = call i32 @compute(i32 10)
+  ret i32 %call
+}
+```
+
+**After Optimization (`--optimize`)**
+```llvm
+define i32 @main() {
+entry:
+  %x_inline0 = alloca i32, align 4
+  store i32 10, ptr %x_inline0, align 4
+  %0 = load i32, ptr %x_inline0, align 4
+  %add_inline = add i32 %0, 5
+  ret i32 %add_inline
+}
+```
+
+---
+
+## Task 3: Interactive Program (`programs/teacup.txt`)
+
+* **Program Description:** Renders an interactive ASCII animation loop of a spinning teacup. It reads user preferences for the number of full turns (or 0 for infinite animation) and rotation speed, then calculates and displays each frame dynamically.
+* **Feature Usage:** Uses `потік`, `витечи`, and `дочекатись` inside the animation loop to spawn `frame_worker` background threads for frame timing synchronization concurrently alongside frame rendering. Uses `для` loops, `clear()` screen refreshes, and `допоки (повне)` for infinite mode.
+* **Running Recorded Sessions:**
 
 ```bash
-chmod +x run.sh
-./run.sh
-```
+# 1. Build native executable
+./build/compiler --optimize programs/teacup.txt build/teacup.ll
+llc -relocation-model=pic -filetype=obj build/teacup.ll -o build/teacup.o
+clang build/teacup.o -pthread -o build/teacup
 
-The script exits with status 0 only if all tests pass and prints
-`passed: N   failed: M` at the end.
+# 2. Run Session 1 (2 Turns, Fast Speed)
+./build/teacup < programs/teacup.in
 
-Semantic behaviour (overflow, mutability, typing) is not covered by these
-tests because it is not part of Stage 1. It will be covered in Stage 2.
-
-## Project layout
-
-```text
-grammar.ebnf        complete grammar (syntax and lexical rules)
-ai_usage.txt        AI usage disclosure
-compiler.cpp        command-line driver
-lexer.h / lexer.cpp           lexer entry point (state-machine driver)
-lexer_context.h, states/      lexer context and the individual states
-parser.h / parser.cpp         recursive-descent parser, one function per rule
-ast.h, ast_fwd.h, nodes/      AST node class hierarchy (every node keeps line:col)
-visitor.h           visitor interface (used from Stage 2)
-keywords.h          the only place where keywords are spelled
-tests/              test programs and expected outputs
-run.sh              test runner
+# 3. Run Session 2 (infinite, Slow Speed)
+./build/teacup < programs/teacup_1turn.in
 ```

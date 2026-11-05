@@ -15,7 +15,8 @@ endif()
 
 # Find LLVM to resolve LLVM headers referenced in visitor.h / AST nodes
 find_package(LLVM REQUIRED CONFIG)
-include_directories(${LLVM_INCLUDE_DIRS})
+# SYSTEM: LLVM headers are not ours, so their -Wextra warnings stay silent
+include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
 llvm_map_components_to_libnames(llvm_libs core support)
@@ -23,8 +24,6 @@ llvm_map_components_to_libnames(llvm_libs core support)
 # Collect source files under src/
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
-# Exclude codegen.cpp and semantic_checker.cpp from compilation
-list(FILTER SOURCES EXCLUDE REGEX ".*(codegen|semantic_checker)\\.cpp$")
 
 add_executable(compiler ${SOURCES})
 

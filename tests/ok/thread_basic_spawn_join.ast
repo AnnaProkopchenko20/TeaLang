@@ -1,0 +1,15 @@
+Program
+  Fn worker -> горнятко_32чл
+    Param id горнятко_32чл
+    Block
+      Print
+        Var id
+      чайна_перерва
+        Var id
+  Thread t1
+  Spawn t1
+    Call worker
+      Const 100
+  Join t1
+  чайна_перерва
+    Const 0

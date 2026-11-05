@@ -1,0 +1,22 @@
+Program
+  Fn додати -> горнятко_32чл
+    Param a горнятко_32чл
+    Param b горнятко_32чл
+    Block
+      Decl s горнятко_32чл const
+        BinOp +
+          Var a
+          Var b
+      Print
+        Var s
+      чайна_перерва
+        Var s
+  Thread t
+  Spawn t
+    Call додати
+      Const 3
+      Const 4
+  Join t
+  Print "done"
+  чайна_перерва
+    Const 0

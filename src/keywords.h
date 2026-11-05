@@ -17,6 +17,19 @@ namespace kw
     inline constexpr const char* WHILE  = "допоки";         // while
     inline constexpr const char* EXIT   = "чайна_перерва";  // exit
 
+    inline constexpr const char* FACT   = "факт";
+    inline constexpr const char* FN     = "fn";
+    inline constexpr const char* STRUCT = "struct";
+    inline constexpr const char* PRINT  = "print";
+    inline constexpr const char* READ   = "read";
+
+    // Stage 3
+    inline constexpr const char* FOR    = "для";            // counting loop
+    inline constexpr const char* THREAD = "потік";          // thread handle type
+    inline constexpr const char* SPAWN  = "витечи";         // start a thread
+    inline constexpr const char* JOIN   = "дочекатись";     // wait for a thread
+    inline constexpr const char* CLEAR  = "clear";          // clear the console
+
     // the language has no keyword for "not mutable", so the dump uses a plain flag
     inline constexpr const char* IMMUTABLE_FLAG = "const";
 
@@ -26,7 +39,9 @@ namespace kw
         return {
             {I32, "keyword"}, {I64, "keyword"}, {BOOL, "keyword"}, {MUT, "keyword"},
             {TRUE_, "keyword"}, {FALSE_, "keyword"}, {IF, "keyword"}, {ELSE, "keyword"},
-            {WHILE, "keyword"}, {EXIT, "keyword"}
+            {WHILE, "keyword"}, {EXIT, "keyword"},
+            {FACT, "keyword"}, {FN, "keyword"}, {STRUCT, "keyword"}, {PRINT, "keyword"}, {READ, "keyword"},
+            {FOR, "keyword"}, {THREAD, "keyword"}, {SPAWN, "keyword"}, {JOIN, "keyword"}, {CLEAR, "keyword"}
         };
     }
 

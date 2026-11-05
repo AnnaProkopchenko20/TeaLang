@@ -1,0 +1,306 @@
+# Rotating teacup, drawn with loops (in the spirit of the spinning-donut meme).
+# Uses threads (потік, витечи, дочекатись) to process frame synchronization concurrently.
+факт горнятко_32чл PHASES := 8
+факт горнятко_32чл ROWS := 13
+факт горнятко_32чл DELAY := 20000000
+
+struct Teacup
+{
+    горнятко_32чл відкрита phase
+    горнятко_32чл відкрита puff
+    fn step := () -> горнятко_32чл
+    {
+        phase + 1 => phase
+        якщо (phase == PHASES)
+        {
+            0 => phase
+        }
+        1 - puff => puff
+        чайна_перерва phase
+    }
+    fn row := (горнятко_32чл r) -> горнятко_32чл
+    {
+        якщо (r == 0)
+        {
+            якщо (puff == 0)
+            {
+                print("               )   (")
+            }
+            інакше
+            {
+                print("               (   )")
+            }
+        }
+        якщо (r == 1)
+        {
+            якщо (puff == 0)
+            {
+                print("                (   )")
+            }
+            інакше
+            {
+                print("                )   (")
+            }
+        }
+        якщо (r == 2)
+        {
+            якщо (puff == 0)
+            {
+                print("               )   (")
+            }
+            інакше
+            {
+                print("               (   )")
+            }
+        }
+        якщо (r == 3)
+        {
+            print("        .-'~~~~~~~~~~~~~~'-.")
+        }
+        якщо (r == 4)
+        {
+            print("        `-.______________.-'")
+        }
+        якщо (r == 9)
+        {
+            print("          (              )")
+        }
+        якщо (r == 10)
+        {
+            print("           `-.________.-'")
+        }
+        якщо (r == 11)
+        {
+            print("   `-.________________________.-'")
+        }
+        якщо (r == 12)
+        {
+            print("      `'--------------------'`")
+        }
+        якщо (r == 5)
+        {
+            якщо (phase == 0)
+            {
+                print("        |                  |------.")
+            }
+            якщо (phase == 1)
+            {
+                print("        |                  |----.")
+            }
+            якщо (phase == 2)
+            {
+                print("        |       .--.       |")
+            }
+            якщо (phase == 3)
+            {
+                print("   .----|                  |")
+            }
+            якщо (phase == 4)
+            {
+                print(" .------|                  |")
+            }
+            якщо (phase == 5)
+            {
+                print("      .-|                  |")
+            }
+            якщо (phase == 6)
+            {
+                print("        |                  |")
+            }
+            якщо (phase == 7)
+            {
+                print("        |                  |-.")
+            }
+        }
+        якщо (r == 6)
+        {
+            якщо (phase == 0)
+            {
+                print("        |~~~o~~~o~~~o~~~o~~|      |")
+            }
+            якщо (phase == 1)
+            {
+                print("        |o~~~o~~~o~~~o~~~o~|    |")
+            }
+            якщо (phase == 2)
+            {
+                print("        |~o~~~o~|  |~~o~~~o|")
+            }
+            якщо (phase == 3)
+            {
+                print("   |    |~~o~~~o~~~o~~~o~~~|")
+            }
+            якщо (phase == 4)
+            {
+                print(" |      |~~~o~~~o~~~o~~~o~~|")
+            }
+            якщо (phase == 5)
+            {
+                print("      | |o~~~o~~~o~~~o~~~o~|")
+            }
+            якщо (phase == 6)
+            {
+                print("        |~o~~~o~~~o~~~o~~~o|")
+            }
+            якщо (phase == 7)
+            {
+                print("        |~~o~~~o~~~o~~~o~~~| |")
+            }
+        }
+        якщо (r == 7)
+        {
+            якщо (phase == 0)
+            {
+                print("        |                  |      |")
+            }
+            якщо (phase == 1)
+            {
+                print("        |                  |    |")
+            }
+            якщо (phase == 2)
+            {
+                print("        |       |  |       |")
+            }
+            якщо (phase == 3)
+            {
+                print("   |    |                  |")
+            }
+            якщо (phase == 4)
+            {
+                print(" |      |                  |")
+            }
+            якщо (phase == 5)
+            {
+                print("      | |                  |")
+            }
+            якщо (phase == 6)
+            {
+                print("        |                  |")
+            }
+            якщо (phase == 7)
+            {
+                print("        |                  | |")
+            }
+        }
+        якщо (r == 8)
+        {
+            якщо (phase == 0)
+            {
+                print("         (                )-------'")
+            }
+            якщо (phase == 1)
+            {
+                print("         (                )-----'")
+            }
+            якщо (phase == 2)
+            {
+                print("         (      '--'      )")
+            }
+            якщо (phase == 3)
+            {
+                print("   '-----(                )")
+            }
+            якщо (phase == 4)
+            {
+                print(" '-------(                )")
+            }
+            якщо (phase == 5)
+            {
+                print("      '--(                )")
+            }
+            якщо (phase == 6)
+            {
+                print("         (                )")
+            }
+            якщо (phase == 7)
+            {
+                print("         (                )--'")
+            }
+        }
+        чайна_перерва r
+    }
+    fn draw := () -> горнятко_32чл
+    {
+        clear()
+        відкрита горнятко_32чл ignored := 0
+        для (відкрита горнятко_32чл r := 0; r != ROWS; r + 1 => r)
+        {
+            row(r) => ignored
+        }
+        чайна_перерва ignored
+    }
+}
+
+fn frame_worker := (горнятко_32чл frame_idx) -> горнятко_32чл
+{
+    чайна_перерва frame_idx
+}
+
+fn pause := (горнятко_32чл n) -> горнятко_32чл
+{
+    відкрита горнятко_32чл k := 0
+    допоки (k != n)
+    {
+        k + 1 => k
+    }
+    чайна_перерва k
+}
+
+print("Tea cup. How many full turns? (1-5, 0 = infinite)")
+горнятко_32чл askedTurns := read()
+print("Speed? 1 = slow, 2 = medium, 3 = fast, 0 = no pause")
+горнятко_32чл askedSpeed := read()
+
+відкрита горнятко_32чл turns := 1
+відкрита горнятко_32чл delay := DELAY * 2
+для (відкрита горнятко_32чл j := 1; j != 6; j + 1 => j)
+{
+    якщо (askedTurns == j)
+    {
+        j => turns
+    }
+}
+для (відкрита горнятко_32чл j := 1; j != 4; j + 1 => j)
+{
+    якщо (askedSpeed == j)
+    {
+        DELAY * 4 - DELAY * j => delay
+    }
+}
+якщо (askedSpeed == 0)
+{
+    0 => delay
+}
+відкрита горнятко_32чл total := 0
+для (відкрита горнятко_32чл k := 0; k != turns; k + 1 => k)
+{
+    total + PHASES => total
+}
+відкрита Teacup cup := {0, 0}
+відкрита горнятко_32чл ignored := 0
+потік bg_thread
+
+якщо (askedTurns == 0)
+{
+    допоки (повне)
+    {
+        cup.draw() => ignored
+        витечи frame_worker(0) => bg_thread
+        дочекатись bg_thread
+        pause(delay) => ignored
+        cup.step() => ignored
+    }
+}
+інакше
+{
+    для (відкрита горнятко_32чл i := 0; i != total; i + 1 => i)
+    {
+        cup.draw() => ignored
+        витечи frame_worker(i) => bg_thread
+        дочекатись bg_thread
+        pause(delay) => ignored
+        cup.step() => ignored
+    }
+}
+print("Enjoy your tea!")
+чайна_перерва 0

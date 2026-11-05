@@ -1,0 +1,1 @@
+compilation error: line 2:20: a thread handle 't1' can only be the target of a spawn or the argument of a wait

@@ -1,0 +1,7 @@
+Program
+  GlobalDecl small горнятко_32чл const
+    Const 100
+  GlobalDecl big кухоль_64чл const
+    Var small
+  чайна_перерва
+    Const 0

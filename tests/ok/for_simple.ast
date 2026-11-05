@@ -1,0 +1,22 @@
+Program
+  Decl sum горнятко_32чл відкрита
+    Const 0
+  для
+    Decl i горнятко_32чл відкрита
+      Const 0
+    BinOp !=
+      Var i
+      Const 5
+    Assign i
+      BinOp +
+        Var i
+        Const 1
+    Block
+      Assign sum
+        BinOp +
+          Var sum
+          Var i
+  Print
+    Var sum
+  чайна_перерва
+    Const 0

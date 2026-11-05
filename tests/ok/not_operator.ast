@@ -2,3 +2,5 @@ Program
   Decl n заповненість const
     Not !
       Bool повне
+  чайна_перерва
+    Const 0

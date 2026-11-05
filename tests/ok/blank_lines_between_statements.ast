@@ -3,3 +3,5 @@ Program
     Const 1
   Decl b горнятко_32чл const
     Const 2
+  чайна_перерва
+    Const 0

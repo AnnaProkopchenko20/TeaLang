@@ -21,3 +21,5 @@ Program
         BinOp +
           Var i
           Const 1
+  чайна_перерва
+    Const 0

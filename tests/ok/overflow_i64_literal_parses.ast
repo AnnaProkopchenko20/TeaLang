@@ -1,3 +1,5 @@
 Program
   Decl x кухоль_64чл const
     Const 99999999999999999999
+  чайна_перерва
+    Const 0

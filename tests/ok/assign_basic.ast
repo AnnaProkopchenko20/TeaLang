@@ -3,3 +3,5 @@ Program
     Const 1
   Assign x
     Const 2
+  чайна_перерва
+    Const 0

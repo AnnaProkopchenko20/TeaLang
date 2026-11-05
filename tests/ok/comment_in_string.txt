@@ -1,0 +1,2 @@
+print("# not a comment")
+чайна_перерва 0

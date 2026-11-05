@@ -1,0 +1,16 @@
+Program
+  Struct S
+    Member x горнятко_32чл const
+    MemberFn m -> горнятко_32чл
+      Block
+        чайна_перерва
+          Var x
+        Decl dead горнятко_32чл const
+          Const 1
+        чайна_перерва
+          Const 0
+  Decl s S const
+    Const 5
+  чайна_перерва
+    MemberCall m
+      Var s

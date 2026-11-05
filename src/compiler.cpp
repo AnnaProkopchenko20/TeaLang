@@ -4,10 +4,18 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
+#include <llvm/IR/Verifier.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/raw_ostream.h>
+
+#include "codegen.h"
 #include "lexer.h"
+#include "optimizer/pipeline.h"
 #include "parser.h"
+#include "semantic_checker.h"
 
 namespace
 {
@@ -17,7 +25,10 @@ namespace
     {
         bool print_ast = false;
         bool print_tokens = false;
+        bool optimize = false;
+        bool opt_stats = false;
         std::string input_path;
+        std::string output_path;
     };
 
     // ---- command line ----
@@ -36,6 +47,12 @@ namespace
             else if (arg == "-tokens" || arg == "--tokens") {
                 opts.print_tokens = true;
             }
+            else if (arg == "-optimize" || arg == "--optimize") {
+                opts.optimize = true;
+            }
+            else if (arg == "--opt-stats") {
+                opts.opt_stats = true;
+            }
             else {
                 files.push_back(arg);
             }
@@ -48,6 +65,10 @@ namespace
         }
 
         opts.input_path = files[0];
+        if (files.size() > 1)
+        {
+            opts.output_path = files[1];
+        }
         return true;
     }
 
@@ -100,10 +121,63 @@ namespace
 
         auto program = parse(lines);
 
-        // Stage 1 output requirement
+        // Plain --ast: the parse tree, before the checker (unchanged behaviour).
+        if (opts.print_ast && !opts.optimize)
+        {
+            program->dump(0);
+            return 0;
+        }
+
+        SemanticChecker checker;
+        program->accept(checker);
+
+        // Print warnings after successful semantic pass only
+        for (const auto& w : checker.warnings)
+        {
+            std::cerr << w << "\n";
+        }
+
+        if (opts.optimize)
+        {
+            OptStats st = optimize(*program);
+            if (opts.opt_stats)
+            {
+                std::cerr << "optimize: rounds=" << st.rounds
+                          << " unreachable=" << st.unreachable
+                          << " constants=" << st.constants
+                          << " variables=" << st.variables
+                          << " functions=" << st.functions
+                          << " inlined=" << st.inlined << "\n";
+            }
+        }
+
+        // --optimize --ast: the checked and optimized tree
         if (opts.print_ast)
         {
             program->dump(0);
+            return 0;
+        }
+
+        CodeGen cg;
+        program->accept(cg);
+
+        if (llvm::verifyModule(*cg.module, &llvm::errs()))
+        {
+            throw std::runtime_error("internal error: generated IR is invalid");
+        }
+
+        if (!opts.output_path.empty())
+        {
+            std::error_code ec;
+            llvm::raw_fd_ostream out(opts.output_path, ec, llvm::sys::fs::OF_None);
+            if (ec)
+            {
+                std::cerr << "Error opening output file: " << ec.message() << "\n";
+                return 1;
+            }
+            cg.module->print(out, nullptr);
+            out.flush();
+            out.close();
         }
 
         return 0;

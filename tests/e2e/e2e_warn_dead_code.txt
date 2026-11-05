@@ -1,0 +1,4 @@
+print("hello")
+чайна_перерва 0
+print("unreachable")
+чайна_перерва 0

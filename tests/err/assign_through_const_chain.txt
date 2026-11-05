@@ -1,0 +1,11 @@
+struct Inner
+{
+    горнятко_32чл val
+}
+struct Outer
+{
+    Inner inner
+}
+відкрита Outer o := {{10}}
+50 => o.inner.val
+чайна_перерва 0

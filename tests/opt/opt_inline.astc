@@ -1,0 +1,15 @@
+Program
+  Decl квадрат.1.x горнятко_32чл const
+    Const 6
+  Decl квадрат.1.r горнятко_32чл const
+    BinOp *
+      Var квадрат.1.x
+      Var квадрат.1.x
+  Decl квадрат.1.ret горнятко_32чл const
+    Var квадрат.1.r
+  Decl a горнятко_32чл const
+    Var квадрат.1.ret
+  Print
+    Var a
+  чайна_перерва
+    Var a

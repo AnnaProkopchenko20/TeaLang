@@ -1,0 +1,33 @@
+Program
+  Decl count горнятко_32чл відкрита
+    Const 0
+  для
+    Decl i горнятко_32чл відкрита
+      Const 0
+    BinOp !=
+      Var i
+      Const 2
+    Assign i
+      BinOp +
+        Var i
+        Const 1
+    Block
+      для
+        Decl j горнятко_32чл відкрита
+          Const 0
+        BinOp !=
+          Var j
+          Const 3
+        Assign j
+          BinOp +
+            Var j
+            Const 1
+        Block
+          Assign count
+            BinOp +
+              Var count
+              Const 1
+  Print
+    Var count
+  чайна_перерва
+    Const 0

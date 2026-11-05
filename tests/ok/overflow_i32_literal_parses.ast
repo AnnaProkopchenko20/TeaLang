@@ -1,3 +1,5 @@
 Program
   Decl x горнятко_32чл const
     Const 2147483648
+  чайна_перерва
+    Const 0

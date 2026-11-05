@@ -1,0 +1,11 @@
+Program
+  GlobalDecl C горнятко_32чл const
+    Const 10
+  Fn f -> горнятко_32чл
+    Block
+      Decl C горнятко_32чл const
+        Const 20
+      чайна_перерва
+        Var C
+  чайна_перерва
+    Const 0

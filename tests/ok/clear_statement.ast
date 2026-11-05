@@ -1,0 +1,5 @@
+Program
+  Clear
+  Print "Screen cleared"
+  чайна_перерва
+    Const 0

@@ -3,3 +3,5 @@ Program
     BinOp ==
       Const 1
       Const 1
+  чайна_перерва
+    Const 0
